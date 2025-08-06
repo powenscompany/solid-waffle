@@ -1,0 +1,27 @@
+#TODO: Add a pre-commit hook to check Dockerfile syntax.
+# These hooks are for local development, please use them (e.g., `pre-commit run --all-files`).
+# They will modify the code to ensure code quality and consistency.
+repos:
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+  rev: v0.11.2
+  hooks:
+    # Ruff formatter.
+  - id: ruff-format
+    # Ruff linter.
+  - id: ruff
+    args: [--fix]
+
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.15.0
+  hooks:
+  - id: pretty-format-toml
+    args:
+    - --autofix
+    - --indent=2
+    - --trailing-commas
+  - id: pretty-format-yaml
+    args:
+    - --autofix
+    - --indent=2
