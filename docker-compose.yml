@@ -1,0 +1,187 @@
+services:
+  backend:
+    image: bookworm-powens-backend
+    container_name: powens-backend
+    build: .
+    volumes:
+      # Mount source code for development
+      # :cached improves performance on macOS/Windows Docker Desktop (ignored on Linux)
+    - ../woob:/home/budgea_user/dev/woob:cached
+    - ../backend:/home/budgea_user/dev/backend:cached
+    - ../apishell:/home/budgea_user/dev/apishell:cached
+      # Mount configuration and data directories
+    - ./etc_bi:/etc/bi/
+    - ./session_folders:/var/log/bi/data
+    - ./session_folders:/home/budgea_user/data
+    - ./session_folders:/home/budgea_user/sessions
+      # Mount SSH keys
+    - ~/.ssh:/home/budgea_user/.ssh:ro
+      # Mount ProxyNet certificate
+    - ../proxynet.pem:/home/budgea_user/dev/proxynet.pem:ro
+    env_file:
+    - ../backend/.env.example
+    - .env
+    environment:
+      # Database connection
+    - MYSQL_ROOT_PASSWORD=1245487
+    - MYSQL_DB_PASSWORD=qwer
+      # Production-like configuration
+    - PW_CONFIG_FILES=backend.conf
+    - PW_API_PLUGINS=* -jobs -background -bddf -cleaner -encryption_migration -file_migration -ocr -oidc -payment_background_worker -regulation -categorization -categorization_ds
+    - PW_API_RESTART_ON_UPDATE=1
+    - PW_API_MANDATORY_TRANSACTIONS_PAGINATION=1
+    - PW_SECRETS_PATH=/etc/bi/powens_secrets.json
+    # - UV_INSECURE_HOST=*
+    stdin_open: true
+    tty: true
+    command: bash
+    ports:
+    - 3158:3158
+    depends_on:
+    - mariadb
+    - gearmand
+    networks:
+    - backend-network
+
+  # Webview service using existing Docker image
+  webview:
+    image: ${ECR_REGISTRY}/docker/webview:${WEBVIEW_RELEASE_TAG:-latest}
+    # Make Docker aware of the architecture, webview images are only built for amd64.
+    platform: linux/amd64
+    container_name: powens-webview
+    environment:
+      # Backend API configuration
+    - API_URL=http://backend:3158
+    - API_HOST=backend
+    - API_PORT=3158
+      # Webview configuration
+    - NODE_ENV=development
+    - PORT=8080
+      # Authentication configuration (adapt based on your backend setup)
+    - AUTH_ENABLED=true
+    volumes:
+      # Mount ProxyNet certificate if needed by webview
+    - ../proxynet.pem:/dev/proxynet.pem:ro
+    ports:
+    - 8080:8080
+    depends_on:
+    - backend
+    networks:
+    - backend-network
+    restart: unless-stopped
+
+  # Production-exact backend (slower on ARM Macs due to emulation)
+  backend-production:
+    image: bookworm-powens-backend:production
+    container_name: powens-backend-production
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    volumes:
+      # Same volumes as development
+      # :cached provides better file I/O performance for macOS/Windows developers
+      # Linux developers: this option is safely ignored and provides no performance penalty
+    - ../woob:/home/budgea_user/dev/woob:cached
+    - ../backend:/home/budgea_user/dev/backend:cached
+    - ../apishell:/home/budgea_user/dev/apishell:cached
+    - ./etc_bi:/etc/bi/
+    - ./session_folders:/var/log/bi/data
+    - ./session_folders:/home/budgea_user/data
+    - ./session_folders:/home/budgea_user/sessions
+    - ~/.ssh:/home/budgea_user/.ssh:ro
+    - ../proxynet.pem:/home/budgea_user/dev/proxynet.pem:ro
+    env_file:
+    - .env
+    environment:
+      # Same environment as development
+    - MYSQL_ROOT_PASSWORD=1245487
+    - MYSQL_DB_PASSWORD=qwer
+    - PW_CONFIG_FILES=backend.conf
+    - PW_API_PLUGINS=* -jobs -background -bddf -cleaner -encryption_migration -file_migration -ocr -oidc -payment_background_worker -regulation -categorization -categorization_ds
+    - PW_API_RESTART_ON_UPDATE=1
+    - PW_API_MANDATORY_TRANSACTIONS_PAGINATION=1
+    - PW_SECRETS_PATH=/etc/bi/powens_secrets.json
+    # - UV_INSECURE_HOST=*
+    stdin_open: true
+    tty: true
+    command: bash
+    ports:
+    - 3159:3158      # Different port to avoid conflicts
+    depends_on:
+    - mariadb
+    - gearmand
+    networks:
+    - backend-network
+    profiles:
+    - production    # Only start with --profile production
+
+  # Webview for production testing
+  webview-production:
+    image: ${ECR_REGISTRY}/docker/webview:${WEBVIEW_RELEASE_TAG:-latest}
+    platform: linux/amd64
+    container_name: powens-webview-production
+    environment:
+      # Point to production backend
+    - API_URL=http://backend-production:3158
+    - API_HOST=backend-production
+    - API_PORT=3158
+    - NODE_ENV=production
+    - PORT=8080
+    - AUTH_ENABLED=true
+    volumes:
+    - ../proxynet.pem:/dev/proxynet.pem:ro
+    ports:
+    - 8081:8080      # Different port to avoid conflicts
+    depends_on:
+    - backend-production
+    networks:
+    - backend-network
+    restart: unless-stopped
+    profiles:
+    - production    # Only start with --profile production
+
+  gearmand:
+    image: artefactual/gearmand:latest
+    container_name: powens-backend-gearmand
+    ports:
+    - 4730:4730
+    networks:
+    - backend-network
+
+  mariadb:
+    image: mariadb:10.5
+    container_name: powens-backend-mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 1245487
+    volumes:
+    - mariadb_data:/var/lib/mysql
+    ports:
+    - 3306:3306
+    networks:
+    - backend-network
+
+#TODO: work on that to implement local SFTP server needed to simulate session folders storage and retrieval
+  # custom_sftp:
+  #   image: custom_sftp
+  #   container_name: powens-backend-sftp
+  #   volumes:
+  #     - $HOME/dev/lab/custom_sftp/data:/home/testing/ 
+  #     - $HOME/dev/lab/custom_sftp/rsa_key/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key 
+  #     - $HOME/dev/lab/custom_sftp/rsa_key/ssh_host_rsa_key.pub:/etc/ssh/ssh_host_rsa_key.pub 
+  #     - $HOME/dev/lab/custom_sftp/main.yml:/etc/ansible/roles/cron_tasks/tasks/main.yml
+  #     - $HOME/dev/lab/custom_sftp/ssh_key_pub/authorized_keys:/home/testing/.ssh/authorized_keys 
+  #   ports:
+  #     - "2222:22" 
+  #   environment:
+  #     SFTP_USERS: "testing:123456789:1001"
+  #   platform: linux/amd64
+  #   networks:
+  #     - backend-network
+
+volumes:
+  mariadb_data:
+
+networks:
+  backend-network:
+    driver: bridge

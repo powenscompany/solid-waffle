@@ -1,0 +1,84 @@
+export PATH=$PATH:$HOME/dev/backend/scripts
+export PYTHONPATH=$PYTHONPATH:$HOME/dev/backend
+export PATH=$PATH:$HOME/.local/bin
+export PYTHONPATH=$PYTHONPATH:$HOME/dev/woob
+# export PYTHONPATH=$PYTHONPATH:$HOME/dev/gearmanpy3/
+
+alias gm="sudo service gearman-job-server start"
+
+function devenv() {
+    # Ensure uv is installed
+    if ! command -v uv &> /dev/null; then
+        echo "🔧 'uv' not found, installing via pip..."
+        pip install "uv==0.5.1"
+    fi
+
+    # Ensure virtual environment exists
+    if [ ! -d "~/dev/backend/.venv" ]; then
+        echo "🔧 Creating Python virtual environment with uv..."
+        uv python install 3.9.19
+        uv venv --python 3.9.19 --relocatable ~/dev/backend/.venv
+    fi
+
+    source ~/dev/backend/.venv/bin/activate
+}
+
+function setup_local_db() {
+    python3 ~/dev/backend/tools/setup_local_databases.py -s --no-interactive --force-drop-databases
+    export BUDGEA_TOKEN=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select token from bi_manage_token where scope='admin';")
+}
+
+
+function create_keys() {
+    # TODO inject a very simple password
+    python3 ~/dev/backend/tools/gen_key.py 
+    mv frontend.pkey /etc/bi && mv backend.key /etc/bi
+    gpg --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key && shred -u /etc/bi/backend.key
+}
+
+function install_deps() {
+    ~/dev/install_deps.sh
+}
+
+function update_woob() {
+    # Needs to be run each time a 'woob update' is necessary.
+    python ~/dev/woob/woob/woob_metadata/build_modules_metadata.py
+    echo 'Woob updated successfully!'
+}
+
+
+function create_budgea_db_user() {
+    sudo mysql -uroot -p1245487 -hmariadb -e "CREATE USER IF NOT EXISTS 'budgea'@'%' IDENTIFIED BY '123456'; GRANT ALL PRIVILEGES ON *.* TO 'budgea'@'%' WITH GRANT OPTION;"   
+}
+
+function create_client() {
+    budgeactl list-domains
+    budgea &
+    BUDGEA_PID=$!
+    budgea.wsgi &
+    WSGI_PID=$!
+    sleep 10
+    curl http://localhost:3158/clients -H "Authorization: Bearer $BUDGEA_TOKEN" -d ''
+    export BUDGEA_CLIENT=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select id from bi_client;")
+    sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "update bi_client set redirect_uris='[\"http://localhost:4200/\", \"https://example.org/user/settings\"]' where id=$BUDGEA_CLIENT;"
+    budgeactl config localhost:3158 root.prefix ''
+    kill $BUDGEA_PID
+    kill $WSGI_PID
+}
+
+function full_setup() {
+    cd ~/dev/backend
+    install_deps
+    update_woob
+    create_budgea_db_user
+    FILE1="/etc/bi/frontend.pkey"
+    FILE2="/etc/bi/backend.key.gpg"
+    if [[ ! -f "$FILE1" || ! -f "$FILE2" ]]; then
+        create_keys
+    fi
+    setup_local_db
+    create_client
+}
+
+# Activate virtual environment
+devenv

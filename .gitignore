@@ -1,0 +1,30 @@
+# Environment files
+.env
+.env.local
+
+# Data and session directories
+session_folders/
+etc_bi/
+
+# Docker volumes
+mariadb_data/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+backup_*.sql
