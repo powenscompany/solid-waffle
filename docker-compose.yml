@@ -9,6 +9,11 @@ services:
     - ../woob:/home/budgea_user/dev/woob:cached
     - ../backend:/home/budgea_user/dev/backend:cached
     - ../apishell:/home/budgea_user/dev/apishell:cached
+      # Keep venv inside container (avoid host .venv interfering)
+      # The bind mount of ../backend to /home/budgea_user/dev/backend in docker-compose.yml
+      # overlays whatever is in the image with your host’s directory, including an existing .venv.
+      # TODO: build the whole venv outside of backend to avoid any special rules to interference
+    - backend_venv:/home/budgea_user/dev/backend/.venv
       # Mount configuration and data directories
     - ./etc_bi:/etc/bi/
     - ./session_folders:/var/log/bi/data
@@ -179,9 +184,74 @@ services:
   #   networks:
   #     - backend-network
 
+  ############
+  # Keymanager
+  ############
+  keymanager-postgres:
+    image: public.ecr.aws/docker/library/postgres:14.6-alpine
+    hostname: keymanager-postgres
+    container_name: keymanager-postgres
+    restart: always
+    ports:
+    - 15432:5432
+    volumes:
+    - local-db-keymanager:/var/lib/postgresql/data
+    environment:
+    - POSTGRES_DB=keymanager
+    - POSTGRES_USER=keymanager
+    - POSTGRES_PASSWORD=keymanager
+    # profiles:
+    #   - keymanager
+    networks:
+    - backend-network
+
+  keymanager-setup:
+    container_name: keymanager-setup
+    image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
+    platform: linux/amd64
+    # ports:
+    #   - 9000:9000
+    environment:
+    - KEYMANAGER_DATABASE_HOST=keymanager-postgres
+    - KEYMANAGER_DATABASE_PORT=5432
+    - KEYMANAGER_LOGGING_OUTPUT=stdout
+    entrypoint: [bash, -c, sleep 1 && python3 manage.py migrate]
+    depends_on:
+    - keymanager-postgres
+    # profiles:
+    #   - init-keymanager
+    networks:
+    - backend-network
+
+  keymanager:
+    container_name: keymanager
+    image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
+    platform: linux/amd64
+    ports:
+    - 9000:9000
+    environment:
+    - KEYMANAGER_DATABASE_HOST=keymanager-postgres
+    - KEYMANAGER_DATABASE_PORT=5432
+    - KEYMANAGER_LOGGING_OUTPUT=stdout
+    entrypoint: [bash, -c, uwsgi --chdir=/usr/share/keymanager/keymanager --module=keymanager.wsgi:application]
+    depends_on:
+    - keymanager-postgres
+    # profiles:
+      # - keymanager
+    networks:
+    - backend-network
+    stop_signal: SIGKILL
+
 volumes:
   mariadb_data:
+
+  # Keymanager database volume
+  local-db-keymanager:
+
+  # Backend venv (container-managed)
+  backend_venv:
 
 networks:
   backend-network:
     driver: bridge
+
