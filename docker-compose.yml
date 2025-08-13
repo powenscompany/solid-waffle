@@ -4,6 +4,8 @@ services:
     container_name: powens-backend
     build: .
     volumes:
+      # TODO: transfer local .ssh/authorized_keys into docker /etc/bi/authorized_keys
+      # TODO: bind to local 
       # Mount source code for development
       # :cached improves performance on macOS/Windows Docker Desktop (ignored on Linux)
     - ../woob:/home/budgea_user/dev/woob:cached
@@ -15,7 +17,8 @@ services:
       # TODO: build the whole venv outside of backend to avoid any special rules to interference
     - backend_venv:/home/budgea_user/dev/backend/.venv
       # Mount configuration and data directories
-    - ./etc_bi:/etc/bi/
+    # - ./etc_bi:/etc/bi/
+    # TODO: needed?
     - ./session_folders:/var/log/bi/data
     - ./session_folders:/home/budgea_user/data
     - ./session_folders:/home/budgea_user/sessions
@@ -51,7 +54,7 @@ services:
   # Webview service using existing Docker image
   webview:
     image: ${ECR_REGISTRY}/docker/webview:${WEBVIEW_RELEASE_TAG:-latest}
-    # Make Docker aware of the architecture, webview images are only built for amd64.
+    # keep platform: linux/amd64 here (pulls amd64 image, runs via emulation)
     platform: linux/amd64
     container_name: powens-webview
     environment:
@@ -74,76 +77,6 @@ services:
     networks:
     - backend-network
     restart: unless-stopped
-
-  # Production-exact backend (slower on ARM Macs due to emulation)
-  backend-production:
-    image: bookworm-powens-backend:production
-    container_name: powens-backend-production
-    build:
-      context: .
-      dockerfile: Dockerfile.production
-    volumes:
-      # Same volumes as development
-      # :cached provides better file I/O performance for macOS/Windows developers
-      # Linux developers: this option is safely ignored and provides no performance penalty
-    - ../woob:/home/budgea_user/dev/woob:cached
-    - ../backend:/home/budgea_user/dev/backend:cached
-    - ../apishell:/home/budgea_user/dev/apishell:cached
-    - ./etc_bi:/etc/bi/
-    - ./session_folders:/var/log/bi/data
-    - ./session_folders:/home/budgea_user/data
-    - ./session_folders:/home/budgea_user/sessions
-    - ~/.ssh:/home/budgea_user/.ssh:ro
-    - ../proxynet.pem:/home/budgea_user/dev/proxynet.pem:ro
-    env_file:
-    - .env
-    environment:
-      # Same environment as development
-    - MYSQL_ROOT_PASSWORD=1245487
-    - MYSQL_DB_PASSWORD=qwer
-    - PW_CONFIG_FILES=backend.conf
-    - PW_API_PLUGINS=* -jobs -background -bddf -cleaner -encryption_migration -file_migration -ocr -oidc -payment_background_worker -regulation -categorization -categorization_ds
-    - PW_API_RESTART_ON_UPDATE=1
-    - PW_API_MANDATORY_TRANSACTIONS_PAGINATION=1
-    - PW_SECRETS_PATH=/etc/bi/powens_secrets.json
-    # - UV_INSECURE_HOST=*
-    stdin_open: true
-    tty: true
-    command: bash
-    ports:
-    - 3159:3158      # Different port to avoid conflicts
-    depends_on:
-    - mariadb
-    - gearmand
-    networks:
-    - backend-network
-    profiles:
-    - production    # Only start with --profile production
-
-  # Webview for production testing
-  webview-production:
-    image: ${ECR_REGISTRY}/docker/webview:${WEBVIEW_RELEASE_TAG:-latest}
-    platform: linux/amd64
-    container_name: powens-webview-production
-    environment:
-      # Point to production backend
-    - API_URL=http://backend-production:3158
-    - API_HOST=backend-production
-    - API_PORT=3158
-    - NODE_ENV=production
-    - PORT=8080
-    - AUTH_ENABLED=true
-    volumes:
-    - ../proxynet.pem:/dev/proxynet.pem:ro
-    ports:
-    - 8081:8080      # Different port to avoid conflicts
-    depends_on:
-    - backend-production
-    networks:
-    - backend-network
-    restart: unless-stopped
-    profiles:
-    - production    # Only start with --profile production
 
   gearmand:
     image: artefactual/gearmand:latest
@@ -187,6 +120,7 @@ services:
   ############
   # Keymanager
   ############
+  # TODO: get rid of that and all .env specific references +++ find solution for backend.conf trick of commenting the whole [cipherer] section
   keymanager-postgres:
     image: public.ecr.aws/docker/library/postgres:14.6-alpine
     hostname: keymanager-postgres

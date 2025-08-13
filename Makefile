@@ -21,21 +21,6 @@ build: ## Build Docker images (fast ARM64 version for development)
 	@echo "🔨 Building Docker images (ARM64 native)..."
 	docker-compose build
 
-build-production: ## Build production-exact Docker image (slower on ARM Macs)
-	@echo "🔨 Building production-exact Docker image (AMD64 with emulation)..."
-	docker build -f Dockerfile.production -t debian11-powens-backend:production .
-
-build-debug: ## Build with verbose output for debugging
-	docker-compose build --progress=plain --no-cache
-
-up: ## Start all services (fast ARM64 version)
-	@echo "🚀 Starting services (development)..."
-	docker-compose up -d
-
-up-production: ## Start production-exact services (slower on ARM Macs)
-	@echo "🚀 Starting services (production-exact with emulation)..."
-	docker-compose --profile production up -d
-
 down: ## Stop all services
 	@echo "🛑 Stopping services..."
 	docker-compose down
@@ -51,14 +36,8 @@ logs: ## Show logs from all services
 logs-backend: ## Show logs from backend service only
 	docker-compose logs -f backend
 
-logs-production: ## Show logs from production backend service only
-	docker-compose logs -f backend-production
-
 shell: ## Connect to backend container with bash (development)
 	docker-compose exec backend bash
-
-shell-production: ## Connect to production-exact backend container with bash
-	docker-compose exec backend-production bash
 
 db-shell: ## Connect to MariaDB with mysql client
 	docker-compose exec mariadb mysql -uroot -p1245487
@@ -66,10 +45,6 @@ db-shell: ## Connect to MariaDB with mysql client
 restart: ## Restart all services
 	@echo "🔄 Restarting services..."
 	docker-compose restart
-
-restart-production: ## Restart production services
-	@echo "🔄 Restarting production services..."
-	docker-compose --profile production restart
 
 status: ## Show status of all services
 	docker-compose ps
@@ -114,6 +89,3 @@ debug-build: ## Build with verbose output for debugging
 
 inspect-backend: ## Show detailed information about backend container
 	docker-compose exec backend bash -c "env | sort && echo '---' && ps aux"
-
-inspect-production: ## Show detailed information about production backend container
-	docker-compose exec backend-production bash -c "env | sort && echo '---' && ps aux"

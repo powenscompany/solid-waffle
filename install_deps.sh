@@ -4,15 +4,16 @@ set -euo pipefail
 
 echo "🐍 Installing Python dependencies..."
 
-# # TODO put repoforge URL in env
-# # Configure uv for private repositories if token is available
-# if [ -n "$REPOFORGE_API_TOKEN" ]; then
-#     echo "🔑 Configuring private repository access..."
-#     export UV_EXTRA_INDEX_URL="https://api:${REPOFORGE_API_TOKEN}@api.repoforge.io/OJDhXySqK"
-#     echo $UV_EXTRA_INDEX_URL
-# else
-#     echo "⚠️  REPOFORGE_API_TOKEN not set - private dependencies may fail"
-# fi
+# Ensure go-task is available in the venv (pip package)
+VENV_DIR="$HOME/dev/backend/.venv"
+if [[ -x "$VENV_DIR/bin/python" ]]; then
+  if ! "$VENV_DIR/bin/python" -c 'import shutil; import sys; sys.exit(0 if shutil.which("task") else 1)'; then
+    echo "🧰 Installing go-task (pip) into venv..."
+    "$VENV_DIR/bin/python" -m pip install -U go-task
+  fi
+else
+  echo "⚠️  Virtualenv not found at $VENV_DIR; skipping go-task install"
+fi
 
 echo $UV_EXTRA_INDEX_URL
 echo "📦 Installing backend dependencies..."

@@ -72,6 +72,7 @@ This development environment uses **Gearman** as the job manager for background 
 | Complexity | Low | High |
 
 # TODO: adapt doc to .env only
+
 If you need to test Celery locally, modify the job manager configuration in `backend.conf`:
 
 ```ini
@@ -123,7 +124,7 @@ Ensure your development directory follows this structure:
 - ✅ **Mounted**: `backend/`, `woob/`, `apishell/` - for live development
 - ❌ **Not Mounted**: `webview/` - uses pre-built Docker image, no local repository needed
 
-#TODO: not GITLAB !!!
+# TODO: not GITLAB !!!
 **Note**: The webview component is served from a pre-built Docker image (`registry.gitlab.com/budget-insight/webview:latest`), eliminating the need for a local webview repository. The `gearman==2.0.3` dependency is handled automatically through the backend's `pyproject.toml` and your private package registry.
 
 ## Quick Start
@@ -290,7 +291,7 @@ Key environment variables from your shell that should be in `.env`:
 
 ```bash
 # SSH and API Keys
-BI_SSH_KEY=/home/budgea/.ssh/id_rsa
+BI_SSH_KEY=/home/budgea_user/.ssh/id_rsa
 
 # UV_INSECURE_HOST=*
 
@@ -455,3 +456,36 @@ sso_role_name = DevelopperRoAccess
     ```
 
 You can view the available images in the ECR console: [https://eu-west-3.console.aws.amazon.com/ecr/private-registry/repositories?region=eu-west-3](https://eu-west-3.console.aws.amazon.com/ecr/private-registry/repositories?region=eu-west-3)
+
+## Usage
+
+### API
+
+<!-- TODO: adpat my own, old doc -->
+```txt
+- create user using the manage token
+
+  ```shell
+  curl http://localhost:3158/auth/init -H 'Authorization: Bearer rhQWNVbGFuNJJR/HWvHYiKtEi1p_ZKUW187XVayd1pHzZTeKB37/fGQvLRm0ke_TZ3ijwjJRRklZVISuHwGvRPGelTK2pVoKlcg7/guYWt5z_sR31WwghjdHGazuSvSy' -d ''
+  {"auth_token": "xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74", "type": "permanent", "id_user": 1}%
+  ```
+
+- create client
+
+  ```shell
+  curl http://localhost:3158/clients -H 'Authorization: Bearer rhQWNVbGFuNJJR/HWvHYiKtEi1p_ZKUW187XVayd1pHzZTeKB37/fGQvLRm0ke_TZ3ijwjJRRklZVISuHwGvRPGelTK2pVoKlcg7/guYWt5z_sR31WwghjdHGazuSvSy' -d ''
+  {"id": 46915388, "name": "Localhost:3158", "redirect_uri": "https://example.org/user/settings", "redirect_uris": ["https://example.org/user/settings"], "public_key": null, "config": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "information": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "pro": false, "id_logo": null, "secret": "UrEuES0ADBusV/Vhu8BDNNA7CNFox6QI"}%
+  ```
+
+- <https://gitlab.com/powenscompany/dev/tools/tech-docs/-/wikis/backend/Add-weboob-connection>
+
+  ```shell
+  curl -H 'Authorization: Bearer xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74' http://localhost:3158/users/me/connections -d 'login=test' -d 'password=1234' -d 'id_connector=59'
+  {"id": 1, "id_user": 1, "id_connector": 59, "last_update": null, "created": "2023-10-25 11:06:49", "active": true, "last_push": null, "next_try": null, "state": null, "error": null, "error_message": null, "expire": null, "id_provider": 59, "id_bank": 59, "connector_uuid": "338178e6-3d01-564f-9a7b-52ca442459bf"}%
+  ```
+
+- webview: `localhost:4200/manage?client_id=&code=&connector_capabilities=bank` —> `localhost:4200/manage?client_id=46915388&code=xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74&connector_capabilities=bank`
+
+`localhost:4200/connect?client_id=67075776&connector_capabilities=bank&redirect_uri=https://example.org/user/settings&max_connections=2`
+
+```

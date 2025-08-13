@@ -1,0 +1,148 @@
+version: '3'
+
+dotenv:
+- .env
+
+vars:
+  DC: docker-compose
+
+tasks:
+  default:
+    desc: List tasks
+    cmds:
+    - task --list
+    silent: true
+
+  setup:
+    desc: Initial setup - create .env and required directories
+    silent: true
+    cmds:
+    - test -f .env || cp .env.example .env
+    - mkdir -p etc_bi session_folders
+    - echo "✅ Setup complete!"
+
+  build:
+    desc: Build Docker images (development)
+    cmds:
+    - '{{.DC}} build'
+
+  build:debug:
+    desc: Build with verbose output for debugging
+    cmds:
+    - '{{.DC}} build --progress=plain --no-cache'
+
+  up:
+    desc: Start all services (development)
+    cmds:
+    - '{{.DC}} up -d'
+
+  down:
+    desc: Stop all services
+    cmds:
+    - '{{.DC}} down'
+
+  clean:
+    desc: Stop services and remove containers, networks, and volumes
+    cmds:
+    - '{{.DC}} down -v --remove-orphans'
+    - docker system prune -f
+
+  logs:
+    desc: Show logs from all services
+    cmds:
+    - '{{.DC}} logs -f'
+
+  logs:backend:
+    desc: Show logs from backend only
+    cmds:
+    - '{{.DC}} logs -f backend'
+
+  shell:
+    desc: Connect to backend container (development)
+    interactive: true
+    cmds:
+    - '{{.DC}} exec backend bash'
+
+  db:shell:
+    desc: Connect to MariaDB with mysql client
+    interactive: true
+    cmds:
+    - '{{.DC}} exec mariadb mysql -uroot -p1245487'
+
+  restart:
+    desc: Restart all services
+    cmds:
+    - '{{.DC}} restart'
+
+  status:
+    desc: Show status of all services
+    cmds:
+    - '{{.DC}} ps'
+
+  full-setup:
+    desc: Run full setup inside container (database, woob, keys, client)
+    cmds:
+    - "{{.DC}} exec backend bash -c 'full_setup'"
+
+  install-woob:
+    desc: Install woob modules in container
+    # Note: Makefile uses 'install_woob' but the function present is 'update_woob' in additional_bashrc.
+    # If needed, replace with: devenv && update_woob
+    cmds:
+    - "{{.DC}} exec backend bash -c 'devenv && install_woob'"
+
+  setup-db:
+    desc: Setup local database in container
+    cmds:
+    - "{{.DC}} exec backend bash -c 'devenv && setup_local_db'"
+
+  test:backend:
+    desc: Run backend tests
+    cmds:
+    - "{{.DC}} exec backend bash -c 'devenv && cd /home/budgea_user/dev/budgea && python -m pytest tests/'"
+
+  test:woob:
+    desc: Run woob tests
+    cmds:
+    - "{{.DC}} exec backend bash -c 'devenv && cd /home/budgea_user/dev/woob && python -m pytest'"
+
+  check-env:
+    desc: Check if environment is properly configured
+    preconditions:
+    - sh: test -f .env
+      msg: ❌ .env file missing
+    - sh: test -d ../backend
+      msg: ❌ backend directory missing
+    - sh: test -d ../woob
+      msg: ❌ woob directory missing
+    - sh: test -f ../proxynet.pem
+      msg: ❌ proxynet.pem missing
+    cmds:
+    - echo "✅ Environment looks good!"
+
+  backup-db:
+    desc: Backup database data
+    cmds:
+    - "{{.DC}} exec mariadb sh -lc 'mysqldump -uroot -p1245487 --all-databases' > backup_$(date +%Y%m%d_%H%M%S).sql"
+    silent: true
+
+  debug:container:
+    desc: Debug container by running with bash and TTY
+    interactive: true
+    cmds:
+    - '{{.DC}} run --rm backend bash'
+
+  debug:build:
+    desc: Build with verbose output for debugging
+    cmds:
+    - '{{.DC}} build --progress=plain --no-cache'
+
+  inspect:backend:
+    desc: Show detailed information about backend container
+    cmds:
+    - "{{.DC}} exec backend bash -c 'env | sort && echo \"---\" && ps aux'"
+
+  validate:
+    desc: Validate the environment
+    cmds:
+    - bash validate.sh

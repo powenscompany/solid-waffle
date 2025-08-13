@@ -25,7 +25,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_SYNC_EXTRA_OPTS="--no-install-package argparse" \
     PW_CONFIG_FILES=backend.conf
 
-# Create directories and user (matching production)
+# Create directories and user
 RUN mkdir -p /var/log/bi /etc/bi && \
     useradd --create-home --uid ${USER_UID} ${USER} && \
     mkdir -p ${HOMEDIR}/data ${HOMEDIR}/sessions && \
@@ -35,7 +35,9 @@ RUN mkdir -p /var/log/bi /etc/bi && \
 RUN mkdir -p ${WORKDIR} && chown -R ${USER}:${USER} ${WORKDIR}
 WORKDIR $WORKDIR
 
-# Install system dependencies (closer to production)
+# Install system dependencies
+# TODO: Clean a bit
+# TODO: Update these packages as Woob and Backend evolve (and drops Debian provided packages)
 RUN apt-get update && apt-get install --no-install-recommends -y \
     # Basic tools
     sudo vim.tiny curl procps nano \
@@ -57,8 +59,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     iputils-ping \
     libdbus-glib-1-2 \
     # Python system packages
-    # TODO: Clean a bit
-    # TODO: Update these packages as Woob and Backend evolve (and drops Debian provided packages)
     python3-alembic python3-pyflakes python3-bcrypt python3-bs4 \
     python3-dateutil python3-dev python3-ecdsa python3-flask \
     python3-future python3-geopy python3-gnupg python3-html2text \
