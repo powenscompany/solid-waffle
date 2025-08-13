@@ -14,6 +14,7 @@ tasks:
     silent: true
 
   setup:
+  # TODO: don't need etc_bi, do not simply copy .env as it should be filled by the user before mounting the container
     desc: Initial setup - create .env and required directories
     silent: true
     cmds:
@@ -34,7 +35,27 @@ tasks:
   up:
     desc: Start all services (development)
     cmds:
+    - task: check-ecr-auth
     - '{{.DC}} up -d'
+
+  up:force:
+    desc: Start all services without ECR auth check (use with caution)
+    cmds:
+    - '{{.DC}} up -d'
+
+  up:safe:
+    desc: Start services with ECR error handling
+    cmds:
+    - |
+      if task check-ecr-auth; then
+        echo "✅ ECR authentication successful, starting all services..."
+        {{.DC}} up -d
+      else
+        echo ""
+        echo "❌ ECR authentication failed. Here are your options:"
+        ./scripts/handle-ecr-error.sh
+        exit 1
+      fi
 
   down:
     desc: Stop all services
@@ -46,6 +67,19 @@ tasks:
     cmds:
     - '{{.DC}} down -v --remove-orphans'
     - docker system prune -f
+
+  # TODO: keep or too dangerous?
+  # clean:host-venv:
+  #   desc: Remove host .venv that might interfere with Docker volume
+  #   cmds:
+  #   - |
+  #     if [[ -d "../backend/.venv" ]]; then
+  #       echo "🧹 Removing host backend/.venv that might interfere with Docker volume..."
+  #       rm -rf "../backend/.venv"
+  #       echo "✅ Host .venv removed"
+  #     else
+  #       echo "✅ No host .venv found"
+  #     fi
 
   logs:
     desc: Show logs from all services
@@ -80,9 +114,39 @@ tasks:
     - '{{.DC}} ps'
 
   full-setup:
-    desc: Run full setup inside container (database, woob, keys, client)
+    desc: Run full setup inside container (uses new lean approach)
     cmds:
-    - "{{.DC}} exec backend bash -c 'full_setup'"
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && ./scripts/setup-environment.sh && source ~/.env_setup && source ~/.dev_functions && devenv && task setup:full'"
+
+  full-setup:legacy:
+    desc: Run full setup using legacy approach (fallback if task not available)
+    cmds:
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && ./scripts/setup-environment.sh && source ~/.env_setup && source ~/.dev_functions && devenv && full_setup'"
+
+  setup:deps:
+    desc: Run new dependency setup inside container
+    cmds:
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && ./scripts/setup-deps.sh'"
+
+  setup:environment:
+    desc: Run complete environment setup (lean container approach)
+    cmds:
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && ./scripts/setup-environment.sh'"
+
+  container:task:
+    desc: 'Run a task inside the container (usage: task container:task -- TASK_NAME)'
+    cmds:
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && task {{.CLI_ARGS}}'"
+
+  validate:setup:
+    desc: Validate the new dependency management setup
+    cmds:
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && ./scripts/validate-setup.sh'"
+
+  migration:status:
+    desc: Check container migration status
+    cmds:
+    - ./scripts/migration-status.sh
 
   install-woob:
     desc: Install woob modules in container
@@ -120,6 +184,29 @@ tasks:
     cmds:
     - echo "✅ Environment looks good!"
 
+  check-ecr-auth:
+    desc: Check ECR authentication status
+    cmds:
+    - ./scripts/check-ecr-auth.sh
+
+  ecr-login:
+    desc: Login to AWS ECR (run this if ECR auth fails)
+    cmds:
+    - aws sso login --profile artifacts
+    - aws ecr get-login-password --profile artifacts --region eu-west-3 | docker login --username AWS --password-stdin 737968113546.dkr.ecr.eu-west-3.amazonaws.com
+
+  up:no-webview:
+    desc: Start services without webview (if ECR auth fails)
+    cmds:
+    - echo "⚠️  Starting without webview due to ECR authentication issues"
+    - echo "💡 Run 'task ecr-login' then 'task up' to include webview"
+    - '{{.DC}} up -d backend mariadb gearmand'
+
+  help:ecr:
+    desc: Show ECR authentication help
+    cmds:
+    - ./scripts/handle-ecr-error.sh
+
   backup-db:
     desc: Backup database data
     cmds:
@@ -141,8 +228,3 @@ tasks:
     desc: Show detailed information about backend container
     cmds:
     - "{{.DC}} exec backend bash -c 'env | sort && echo \"---\" && ps aux'"
-
-  validate:
-    desc: Validate the environment
-    cmds:
-    - bash validate.sh

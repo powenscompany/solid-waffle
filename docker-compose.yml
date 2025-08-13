@@ -1,11 +1,10 @@
 services:
   backend:
-    image: bookworm-powens-backend
-    container_name: powens-backend
+    image: bookworm-powens-stack
+    container_name: powens-local-stack
     build: .
     volumes:
-      # TODO: transfer local .ssh/authorized_keys into docker /etc/bi/authorized_keys
-      # TODO: bind to local 
+      # SSH authorized_keys setup handled by scripts/setup-environment.sh
       # Mount source code for development
       # :cached improves performance on macOS/Windows Docker Desktop (ignored on Linux)
     - ../woob:/home/budgea_user/dev/woob:cached
@@ -16,9 +15,14 @@ services:
       # overlays whatever is in the image with your host’s directory, including an existing .venv.
       # TODO: build the whole venv outside of backend to avoid any special rules to interference
     - backend_venv:/home/budgea_user/dev/backend/.venv
+      # Mount container-specific files
+    - ./container-Taskfile.yml:/home/budgea_user/dev/Taskfile.yml:ro
+    - ./scripts:/home/budgea_user/dev/scripts:ro
+      # Mount container-specific bashrc
+    - ./container-bashrc:/home/budgea_user/dev/container-bashrc:ro
+      # Mount legacy files for backward compatibility
+    - ./install_deps.sh:/home/budgea_user/dev/install_deps.sh:ro
       # Mount configuration and data directories
-    # - ./etc_bi:/etc/bi/
-    # TODO: needed?
     - ./session_folders:/var/log/bi/data
     - ./session_folders:/home/budgea_user/data
     - ./session_folders:/home/budgea_user/sessions
@@ -39,7 +43,6 @@ services:
     - PW_API_RESTART_ON_UPDATE=1
     - PW_API_MANDATORY_TRANSACTIONS_PAGINATION=1
     - PW_SECRETS_PATH=/etc/bi/powens_secrets.json
-    # - UV_INSECURE_HOST=*
     stdin_open: true
     tty: true
     command: bash
@@ -99,82 +102,64 @@ services:
     networks:
     - backend-network
 
-#TODO: work on that to implement local SFTP server needed to simulate session folders storage and retrieval
-  # custom_sftp:
-  #   image: custom_sftp
-  #   container_name: powens-backend-sftp
-  #   volumes:
-  #     - $HOME/dev/lab/custom_sftp/data:/home/testing/ 
-  #     - $HOME/dev/lab/custom_sftp/rsa_key/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key 
-  #     - $HOME/dev/lab/custom_sftp/rsa_key/ssh_host_rsa_key.pub:/etc/ssh/ssh_host_rsa_key.pub 
-  #     - $HOME/dev/lab/custom_sftp/main.yml:/etc/ansible/roles/cron_tasks/tasks/main.yml
-  #     - $HOME/dev/lab/custom_sftp/ssh_key_pub/authorized_keys:/home/testing/.ssh/authorized_keys 
-  #   ports:
-  #     - "2222:22" 
-  #   environment:
-  #     SFTP_USERS: "testing:123456789:1001"
-  #   platform: linux/amd64
-  #   networks:
-  #     - backend-network
-
   ############
   # Keymanager
   ############
-  # TODO: get rid of that and all .env specific references +++ find solution for backend.conf trick of commenting the whole [cipherer] section
-  keymanager-postgres:
-    image: public.ecr.aws/docker/library/postgres:14.6-alpine
-    hostname: keymanager-postgres
-    container_name: keymanager-postgres
-    restart: always
-    ports:
-    - 15432:5432
-    volumes:
-    - local-db-keymanager:/var/lib/postgresql/data
-    environment:
-    - POSTGRES_DB=keymanager
-    - POSTGRES_USER=keymanager
-    - POSTGRES_PASSWORD=keymanager
-    # profiles:
-    #   - keymanager
-    networks:
-    - backend-network
+  # TODO: fix this and implement keymanager setup
+  # keymanager-postgres:
+  #   image: public.ecr.aws/docker/library/postgres:14.6-alpine
+  #   hostname: keymanager-postgres
+  #   container_name: keymanager-postgres
+  #   restart: always
+  #   ports:
+  #   - 15432:5432
+  #   volumes:
+  #   - local-db-keymanager:/var/lib/postgresql/data
+  #   environment:
+  #   - POSTGRES_DB=keymanager
+  #   - POSTGRES_USER=keymanager
+  #   - POSTGRES_PASSWORD=keymanager
+  #   # profiles:
+  #   #   - keymanager
+  #   networks:
+  #   - backend-network
 
-  keymanager-setup:
-    container_name: keymanager-setup
-    image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
-    platform: linux/amd64
-    # ports:
-    #   - 9000:9000
-    environment:
-    - KEYMANAGER_DATABASE_HOST=keymanager-postgres
-    - KEYMANAGER_DATABASE_PORT=5432
-    - KEYMANAGER_LOGGING_OUTPUT=stdout
-    entrypoint: [bash, -c, sleep 1 && python3 manage.py migrate]
-    depends_on:
-    - keymanager-postgres
-    # profiles:
-    #   - init-keymanager
-    networks:
-    - backend-network
+  # keymanager-setup:
+  #   container_name: keymanager-setup
+  #   image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
+  #   platform: linux/amd64
+  #   # ports:
+  #   #   - 9000:9000
+  #   environment:
+  #   - KEYMANAGER_DATABASE_HOST=keymanager-postgres
+  #   - KEYMANAGER_DATABASE_PORT=5432
+  #   - KEYMANAGER_LOGGING_OUTPUT=stdout
+  #   entrypoint: [bash, -c, sleep 1 && python3 manage.py migrate]
+  #   depends_on:
+  #   - keymanager-postgres
+  #   # profiles:
+  #   #   - init-keymanager
+  #   networks:
+  #   - backend-network
 
-  keymanager:
-    container_name: keymanager
-    image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
-    platform: linux/amd64
-    ports:
-    - 9000:9000
-    environment:
-    - KEYMANAGER_DATABASE_HOST=keymanager-postgres
-    - KEYMANAGER_DATABASE_PORT=5432
-    - KEYMANAGER_LOGGING_OUTPUT=stdout
-    entrypoint: [bash, -c, uwsgi --chdir=/usr/share/keymanager/keymanager --module=keymanager.wsgi:application]
-    depends_on:
-    - keymanager-postgres
-    # profiles:
-      # - keymanager
-    networks:
-    - backend-network
-    stop_signal: SIGKILL
+  # keymanager:
+  #   container_name: keymanager
+  #   image: 737968113546.dkr.ecr.eu-west-3.amazonaws.com/docker/backend-keymanager:5.0.0
+  #   platform: linux/amd64
+  #   ports:
+  #   - 9000:9000
+  #   environment:
+  #   - KEYMANAGER_DATABASE_HOST=keymanager-postgres
+  #   - KEYMANAGER_DATABASE_PORT=5432
+  #   - KEYMANAGER_LOGGING_OUTPUT=stdout
+  #   entrypoint: [bash, -c, uwsgi --chdir=/usr/share/keymanager/keymanager --module=keymanager.wsgi:application]
+  #   depends_on:
+  #   - keymanager-postgres
+  #   # profiles:
+  #     # - keymanager
+  #   networks:
+  #   - backend-network
+  #   stop_signal: SIGKILL
 
 volumes:
   mariadb_data:

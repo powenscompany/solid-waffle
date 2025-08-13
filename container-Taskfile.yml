@@ -1,0 +1,221 @@
+version: '3'
+
+# Container-specific Taskfile for development workflows
+# This file is bind-mounted into the container at /home/budgea_user/dev/Taskfile.yml
+
+vars:
+  BACKEND_DIR: /home/budgea_user/dev/backend
+  WOOB_DIR: /home/budgea_user/dev/woob
+  VENV_DIR: /home/budgea_user/dev/backend/.venv
+
+tasks:
+  default:
+    desc: List available container tasks
+    cmds:
+    - task --list
+    silent: true
+
+  # Development server tasks
+  dev:budgea:
+    desc: Start budgea development server
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+    - echo "🚀 Starting budgea server..."
+    - budgea
+    interactive: true
+
+  dev:wsgi:
+    desc: Start budgea.wsgi development server
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+    - echo "🚀 Starting budgea.wsgi server..."
+    - budgea.wsgi
+    interactive: true
+
+  dev:both:
+    desc: Start both budgea and budgea.wsgi in parallel (requires tmux)
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+    - |
+      if ! command -v tmux &> /dev/null; then
+        echo "❌ tmux not available. Install it or run servers separately:"
+        echo "   task dev:budgea    # in one terminal"
+        echo "   task dev:wsgi      # in another terminal"
+        exit 1
+      fi
+      echo "🚀 Starting both servers in tmux session 'budgea-dev'..."
+      tmux new-session -d -s budgea-dev
+      tmux send-keys -t budgea-dev:0 'budgea' Enter
+      tmux split-window -t budgea-dev -h
+      tmux send-keys -t budgea-dev:1 'budgea.wsgi' Enter
+      echo "✅ Servers started in tmux session 'budgea-dev'"
+      echo "   Attach with: tmux attach -t budgea-dev"
+      echo "   Kill with: tmux kill-session -t budgea-dev"
+
+  dev:stop:
+    desc: Stop tmux development session
+    cmds:
+    - tmux kill-session -t budgea-dev 2>/dev/null || echo "No active budgea-dev session"
+
+  dev:attach:
+    desc: Attach to development tmux session
+    interactive: true
+    cmds:
+    - tmux attach -t budgea-dev
+
+  # Environment management
+  env:activate:
+    desc: Activate development environment (source this in your shell)
+    cmds:
+    - echo "source {{.VENV_DIR}}/bin/activate"
+    silent: true
+
+  env:status:
+    desc: Show environment status
+    cmds:
+    - echo "🔍 Environment Status:"
+    - echo "Python:" && python --version 2>/dev/null || echo "Not available"
+    - echo "Virtual env:" && echo ${VIRTUAL_ENV:-"Not activated"}
+    - echo "UV:" && uv --version 2>/dev/null || echo "Not available"
+    - echo "Task:" && task --version 2>/dev/null || echo "Not available"
+
+  # Environment setup
+  setup:environment:
+    desc: Complete environment setup (lean container approach)
+    cmds:
+    - echo "🚀 Running complete environment setup..."
+    - ./scripts/setup-environment.sh
+
+  # Dependency management
+  deps:install:
+    desc: Install all dependencies (backend + woob) - legacy approach
+    cmds:
+    - echo "📦 Installing dependencies..."
+    - devenv
+    - install_deps
+
+  deps:sync:
+    desc: Sync backend dependencies only
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+    - echo "🔄 Syncing backend dependencies..."
+    - uv sync --frozen ${UV_SYNC_EXTRA_OPTS}
+
+  deps:woob:
+    desc: Install/update woob dependencies
+    dir: '{{.WOOB_DIR}}'
+    cmds:
+    - echo "📦 Installing woob dependencies..."
+    - uv pip install -r .ci/requirements.txt
+    - uv pip install -r .ci/requirements_modules.txt
+    - uv pip install "requests==2.28.2" "Jinja2==3.0.0"
+    - uv pip install -e .
+
+  # Database tasks
+  db:setup:
+    desc: Setup local databases
+    cmds:
+    - echo "🗄️  Setting up local databases..."
+    - setup_local_db
+
+  db:user:
+    desc: Create budgea database user
+    cmds:
+    - echo "👤 Creating budgea database user..."
+    - create_budgea_db_user
+
+  # Woob tasks
+  woob:update:
+    desc: Update woob modules metadata (build_modules_metadata.py)
+    cmds:
+    - echo "🔄 Updating woob modules metadata..."
+    - bash -c "source {{.VENV_DIR}}/bin/activate && python {{.WOOB_DIR}}/woob/woob_metadata/build_modules_metadata.py"
+
+  woob:update-repos:
+    desc: Update woob repositories (woob update command)
+    cmds:
+    - echo "🔄 Updating woob repositories..."
+    - bash -c "source {{.VENV_DIR}}/bin/activate && woob update"
+
+  # Setup tasks
+  setup:keys:
+    desc: Generate and setup encryption keys
+    cmds:
+    - echo "🔐 Setting up encryption keys..."
+    - create_keys
+
+  setup:client:
+    desc: Create budgea client
+    cmds:
+    - echo "🔧 Creating budgea client..."
+    - create_client
+
+  setup:full:
+    desc: Run complete setup (recommended - uses new lean approach)
+    cmds:
+    - echo "🚀 Running full setup with lean container approach..."
+    - task setup:environment
+    - task woob:update
+    - task db:user
+    - task setup:keys
+    - task db:setup
+    - task setup:client
+    - echo "✅ Full setup complete!"
+
+  setup:full:legacy:
+    desc: Run complete setup using legacy approach
+    cmds:
+    - echo "🚀 Running legacy full setup..."
+    - task deps:install
+    - task woob:update
+    - task db:user
+    - task setup:keys
+    - task db:setup
+    - task setup:client
+    - echo "✅ Legacy full setup complete!"
+
+  # Testing tasks
+  test:backend:
+    desc: Run backend tests
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+    - echo "🧪 Running backend tests..."
+    - python -m pytest tests/
+
+  test:woob:
+    desc: Run woob tests
+    dir: '{{.WOOB_DIR}}'
+    cmds:
+    - echo "🧪 Running woob tests..."
+    - python -m pytest
+
+  # Utility tasks
+  clean:cache:
+    desc: Clean Python cache files
+    cmds:
+    - echo "🧹 Cleaning Python cache..."
+    - find {{.BACKEND_DIR}} -name "*.pyc" -delete 2>/dev/null || true
+    - find {{.BACKEND_DIR}} -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    - find {{.WOOB_DIR}} -name "*.pyc" -delete 2>/dev/null || true
+    - find {{.WOOB_DIR}} -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+  logs:tail:
+    desc: Tail application logs
+    cmds:
+    - echo "Tailing logs..."
+    - tail -f /var/log/bi/*.log 2>/dev/null || echo "No log files found in /var/log/bi/"
+
+  # info-paths:
+  #   desc: Show important paths and environment info
+  #   cmds:
+  #   - echo "Important Paths:"
+  #   - echo "Backend: {{.BACKEND_DIR}}"
+  #   - echo "Woob: '{{.WOOB_DIR}}'"
+  #   - echo "Virtual env: {{.VENV_DIR}}"
+  #   - 'echo "Python path:" && echo "$PYTHONPATH"'
+  #   - 'echo "PATH:" && echo "$PATH"'
+
+  validate:
+    desc: Validate the development environment setup
+    cmds:
+    - ./scripts/validate-setup.sh

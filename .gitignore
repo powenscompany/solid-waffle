@@ -4,7 +4,6 @@
 
 # Data and session directories
 session_folders/
-etc_bi/
 
 # Docker volumes
 mariadb_data/

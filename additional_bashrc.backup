@@ -1,0 +1,140 @@
+export PATH=$PATH:$HOME/dev/backend/scripts
+export PYTHONPATH=$PYTHONPATH:$HOME/dev/backend
+export PATH=$PATH:$HOME/.local/bin
+export PYTHONPATH=$PYTHONPATH:$HOME/dev/woob
+# export PYTHONPATH=$PYTHONPATH:$HOME/dev/gearmanpy3/
+
+alias gm="sudo service gearman-job-server start"
+
+function devenv() {
+    local VENV_DIR="$HOME/dev/backend/.venv"
+    local REQUIRED_PY="3.9.19"
+
+    # Ensure uv is installed
+    if ! command -v uv &> /dev/null; then
+        echo "🔧 'uv' not found, installing via pip..."
+        pip install "uv==0.5.1"
+    fi
+
+    # Check if venv exists and has the correct Python version
+    NEEDS_RECREATION=false
+    if [ -d "$VENV_DIR" ]; then
+        if [ -x "$VENV_DIR/bin/python" ]; then
+            CURRENT_PY_VER="$("$VENV_DIR/bin/python" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo "")"
+            if [ "$CURRENT_PY_VER" != "$REQUIRED_PY" ]; then
+                echo "♻️ Recreating virtualenv with Python $REQUIRED_PY (found: ${CURRENT_PY_VER:-unknown})..."
+                NEEDS_RECREATION=true
+            fi
+        else
+            echo "🔧 Virtual environment exists but Python executable not found, recreating..."
+            NEEDS_RECREATION=true
+        fi
+    else
+        echo "🔧 Creating Python virtual environment with uv..."
+        NEEDS_RECREATION=true
+    fi
+
+    # Recreate venv if needed (handle Docker volume mount)
+    if [ "$NEEDS_RECREATION" = true ]; then
+        # Clear the contents instead of removing the directory (Docker volume mount)
+        if [ -d "$VENV_DIR" ]; then
+            rm -rf "$VENV_DIR"/* "$VENV_DIR"/.[!.]* 2>/dev/null || true
+        fi
+        # Ensure proper ownership and permissions for Docker volume
+        sudo chown -R $(whoami):$(id -gn) "$VENV_DIR" 2>/dev/null || true
+        chmod 755 "$VENV_DIR" 2>/dev/null || true
+        
+        echo "🔧 Installing Python $REQUIRED_PY..."
+        uv python install "$REQUIRED_PY"
+        
+        echo "🔧 Creating virtual environment..."
+        if ! uv venv --python "$REQUIRED_PY" --relocatable "$VENV_DIR"; then
+            echo "❌ Failed to create virtual environment with uv, falling back to python -m venv..."
+            # Find the installed Python and use it directly
+            PYTHON_PATH=$(uv python find "$REQUIRED_PY" 2>/dev/null || echo "python$REQUIRED_PY")
+            if command -v "$PYTHON_PATH" &> /dev/null; then
+                "$PYTHON_PATH" -m venv "$VENV_DIR"
+            else
+                echo "❌ Could not find Python $REQUIRED_PY, using system python..."
+                python3 -m venv "$VENV_DIR"
+            fi
+        fi
+    fi
+
+    # Verify the venv was created successfully before trying to activate
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+        echo "❌ Virtual environment activation script not found at $VENV_DIR/bin/activate"
+        echo "🔧 Creating fallback virtual environment..."
+        python3 -m venv "$VENV_DIR"
+    fi
+
+    source "$VENV_DIR/bin/activate"
+}
+
+function setup_local_db() {
+    python3 "$HOME/dev/backend/tools/setup_local_databases.py" -s --no-interactive --force-drop-databases
+    export BUDGEA_TOKEN=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select token from bi_manage_token where scope='admin';")
+}
+
+
+function create_keys() {
+    # TODO inject a very simple password
+    # python3 "$HOME/dev/backend/tools/gen_key.py"
+    # mv frontend.pkey /etc/bi && mv backend.key /etc/bi
+    # gpg --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key && shred -u /etc/bi/backend.key
+    python3 "$HOME/dev/backend/tools/gen_key.py"
+    sudo mkdir -p /etc/bi
+    sudo mv -f frontend.pkey /etc/bi/frontend.pkey
+    sudo mv -f backend.key /etc/bi/backend.key
+    sudo chmod 600 /etc/bi/frontend.pkey /etc/bi/backend.key
+    # Optional: keep an encrypted copy too, but DO NOT shred the plaintext in dev
+    sudo gpg --batch --yes --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key
+}
+
+function install_deps() {
+    "$HOME/dev/install_deps.sh"
+}
+
+function update_woob() {
+    # Needs to be run each time a 'woob update' is necessary.
+    # TODO: add option to not re-generate it
+    python "$HOME/dev/woob/woob/woob_metadata/build_modules_metadata.py"
+    echo 'Woob updated successfully!'
+}
+
+
+function create_budgea_db_user() {
+    sudo mysql -uroot -p1245487 -hmariadb -e "CREATE USER IF NOT EXISTS 'budgea'@'%' IDENTIFIED BY '123456'; GRANT ALL PRIVILEGES ON *.* TO 'budgea'@'%' WITH GRANT OPTION;"   
+}
+
+function create_client() {
+    budgeactl list-domains
+    budgea &
+    BUDGEA_PID=$!
+    budgea.wsgi &
+    WSGI_PID=$!
+    sleep 10
+    curl http://localhost:3158/clients -H "Authorization: Bearer $BUDGEA_TOKEN" -d ''
+    export BUDGEA_CLIENT=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select id from bi_client;")
+    sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "update bi_client set redirect_uris='[\"http://localhost:4200/\", \"https://example.org/user/settings\"]' where id=$BUDGEA_CLIENT;"
+    budgeactl config localhost:3158 root.prefix ''
+    kill $BUDGEA_PID
+    kill $WSGI_PID
+}
+
+function full_setup() {
+    cd "$HOME/dev/backend"
+    install_deps
+    update_woob
+    create_budgea_db_user
+    FILE1="/etc/bi/frontend.pkey"
+    FILE2="/etc/bi/backend.key.gpg"
+    if [[ ! -f "$FILE1" || ! -f "$FILE2" ]]; then
+        create_keys
+    fi
+    setup_local_db
+    create_client
+}
+
+# Activate virtual environment
+devenv

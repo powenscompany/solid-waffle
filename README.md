@@ -71,20 +71,6 @@ This development environment uses **Gearman** as the job manager for background 
 | Monitoring | Custom scripts | Built-in (Flower) |
 | Complexity | Low | High |
 
-# TODO: adapt doc to .env only
-
-If you need to test Celery locally, modify the job manager configuration in `backend.conf`:
-
-```ini
-# Switch to Celery (requires additional containers)
-[jobs]
-manager = celery
-broker_url = amqp://budgea:budgea@rabbitmq:5672
-result_backend = redis://:@redis:6379/0
-```
-
-**Current choice**: Gearman for simplicity and development speed. ⚡
-
 ## Directory Structure
 
 Ensure your development directory follows this structure:
@@ -124,7 +110,7 @@ Ensure your development directory follows this structure:
 - ✅ **Mounted**: `backend/`, `woob/`, `apishell/` - for live development
 - ❌ **Not Mounted**: `webview/` - uses pre-built Docker image, no local repository needed
 
-# TODO: not GITLAB !!!
+<!-- TODO: not GITLAB!!! -->
 **Note**: The webview component is served from a pre-built Docker image (`registry.gitlab.com/budget-insight/webview:latest`), eliminating the need for a local webview repository. The `gearman==2.0.3` dependency is handled automatically through the backend's `pyproject.toml` and your private package registry.
 
 ## Quick Start
@@ -143,14 +129,20 @@ Ensure your development directory follows this structure:
    ./setup.sh
    ```
 
-3. **Start the full stack**:
+3. **Login to ECR** (if not already done):
+
+   ```bash
+   task ecr-login
+   ```
+
+4. **Start the full stack**:
 
    For daily development (native architecture):
 
    ```bash
-   docker-compose up -d
+   task up
    # or
-   make up
+   docker-compose up -d
    ```
 
    For production-exact testing (x86_64 emulation on ARM):
@@ -180,7 +172,11 @@ Ensure your development directory follows this structure:
 5. **Run full setup inside container**:
 
    ```bash
-   full_setup
+   # New lean container approach (recommended):
+   task setup:full
+   
+   # Or traditional way (legacy):
+   task setup:full:legacy
    ```
 
 6. **Access the application**:
@@ -320,6 +316,69 @@ PW_API_PLUGINS=* -jobs -background...
 | Gearman | 4730 | Job queue server | Internal | default |
 | SFTP | 2222 | Test SFTP server | Internal | default |
 
+## 🚀 Lean Container Architecture (NEW!)
+
+We've migrated to a **lean container approach** following industry best practices:
+
+- **Dockerfile**: Only system dependencies (faster builds, smaller images)
+- **Runtime setup**: Python packages and app configuration handled at runtime
+- **No conflicts**: Single package manager (UV) for all Python dependencies
+- **Better performance**: Improved Docker layer caching and build times
+
+## Improved Dependency Management
+
+We've introduced a cleaner dependency management system with better separation of concerns:
+
+### New Task-Based Workflow (Recommended)
+
+Inside the container, you now have access to a comprehensive task system:
+
+```bash
+# See all available tasks
+task
+
+# Install dependencies (replaces install_deps)
+task deps:install
+
+# Start development servers in tmux
+task dev:both
+
+# Run full setup (replaces full_setup function)
+task setup:full
+
+# Individual setup steps
+task db:setup      # Setup database
+task woob:update   # Update woob modules
+task setup:keys    # Generate encryption keys
+```
+
+### Development Server Management
+
+```bash
+# Start both servers in tmux (recommended)
+task dev:both
+
+# Attach to running tmux session
+task dev:attach
+
+# Stop development servers
+task dev:stop
+
+# Start individual servers
+task dev:budgea    # Just budgea server
+task dev:wsgi      # Just wsgi server
+```
+
+### Legacy Support
+
+The old functions still work for backward compatibility:
+
+- `full_setup` - Complete setup
+- `install_deps` - Install dependencies  
+- `devenv` - Activate environment
+
+See `DEPENDENCY_MIGRATION.md` for detailed migration guide.
+
 ## Development Workflow
 
 1. **Make changes** to backend, woob, or apishell code in your local directories
@@ -342,7 +401,8 @@ PW_API_PLUGINS=* -jobs -background...
 - Ensure backend container is running: `docker-compose ps`
 - Check if webview can reach backend: `docker-compose logs webview`
 - Verify network connectivity: `docker network ls`
-- Check webview image pull: `docker pull registry.gitlab.com/budget-insight/webview:latest`
+- **ECR Authentication Error (403 Forbidden)**: Run `task ecr-login` to authenticate with AWS ECR
+- Check ECR authentication status: `task check-ecr-auth`
 
 ### Database connection issues
 
@@ -461,31 +521,28 @@ You can view the available images in the ECR console: [https://eu-west-3.console
 
 ### API
 
-<!-- TODO: adpat my own, old doc -->
-```txt
+<!-- TODO: adapt my own, old doc -->
 - create user using the manage token
 
   ```shell
-  curl http://localhost:3158/auth/init -H 'Authorization: Bearer rhQWNVbGFuNJJR/HWvHYiKtEi1p_ZKUW187XVayd1pHzZTeKB37/fGQvLRm0ke_TZ3ijwjJRRklZVISuHwGvRPGelTK2pVoKlcg7/guYWt5z_sR31WwghjdHGazuSvSy' -d ''
-  {"auth_token": "xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74", "type": "permanent", "id_user": 1}%
+  curl http://localhost:3158/auth/init -H 'Authorization: Bearer yyyyyyy' -d ''
+  {"auth_token": "xxxxxxx", "type": "permanent", "id_user": 1}%
   ```
 
 - create client
 
   ```shell
-  curl http://localhost:3158/clients -H 'Authorization: Bearer rhQWNVbGFuNJJR/HWvHYiKtEi1p_ZKUW187XVayd1pHzZTeKB37/fGQvLRm0ke_TZ3ijwjJRRklZVISuHwGvRPGelTK2pVoKlcg7/guYWt5z_sR31WwghjdHGazuSvSy' -d ''
-  {"id": 46915388, "name": "Localhost:3158", "redirect_uri": "https://example.org/user/settings", "redirect_uris": ["https://example.org/user/settings"], "public_key": null, "config": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "information": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "pro": false, "id_logo": null, "secret": "UrEuES0ADBusV/Vhu8BDNNA7CNFox6QI"}%
+  curl http://localhost:3158/clients -H 'Authorization: Bearer yyyyyyy' -d ''
+  {"id": 46915388, "name": "Localhost:3158", "redirect_uri": "https://example.org/user/settings", "redirect_uris": ["https://example.org/user/settings"], "public_key": null, "config": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "information": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "pro": false, "id_logo": null, "secret": "zzzzzzzz"}%
   ```
 
 - <https://gitlab.com/powenscompany/dev/tools/tech-docs/-/wikis/backend/Add-weboob-connection>
 
   ```shell
-  curl -H 'Authorization: Bearer xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74' http://localhost:3158/users/me/connections -d 'login=test' -d 'password=1234' -d 'id_connector=59'
+  curl -H 'Authorization: Bearer xxxxxxx' http://localhost:3158/users/me/connections -d 'login=test' -d 'password=1234' -d 'id_connector=59'
   {"id": 1, "id_user": 1, "id_connector": 59, "last_update": null, "created": "2023-10-25 11:06:49", "active": true, "last_push": null, "next_try": null, "state": null, "error": null, "error_message": null, "expire": null, "id_provider": 59, "id_bank": 59, "connector_uuid": "338178e6-3d01-564f-9a7b-52ca442459bf"}%
   ```
 
-- webview: `localhost:4200/manage?client_id=&code=&connector_capabilities=bank` —> `localhost:4200/manage?client_id=46915388&code=xJShV0Xml8qhuf8j0AUrFYTpTGxc0to0Fy3XbTh2/Ctezkz818iWwa3YQ0apbuTAiFlbJlcvRkQwMI/uPGrB4ThyOmu_I9bdYMg8yReobiABhQ1g_dyJJq4RHttZWG74&connector_capabilities=bank`
+- webview: `localhost:4200/manage?client_id=&code=&connector_capabilities=bank` —> `localhost:4200/manage?client_id=46915388&code=xxxxxxx&connector_capabilities=bank`
 
 `localhost:4200/connect?client_id=67075776&connector_capabilities=bank&redirect_uri=https://example.org/user/settings&max_connections=2`
-
-```

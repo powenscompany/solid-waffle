@@ -1,0 +1,167 @@
+# Container-specific bashrc additions
+# Cleaner version focused on essential functionality
+
+# Environment setup
+export PATH=$PATH:$HOME/dev/backend/scripts:$HOME/.local/bin
+export PYTHONPATH=$PYTHONPATH:$HOME/dev/backend:$HOME/dev/woob
+export BUDGEA_VENV_DIR="$HOME/dev/backend/.venv"
+
+# Aliases
+alias gm="sudo service gearman-job-server start"
+alias ll="ls -la"
+alias la="ls -la"
+
+# Quick environment activation
+function devenv() {
+    local venv_dir="$BUDGEA_VENV_DIR"
+    
+    if [[ -f "$venv_dir/bin/activate" ]]; then
+        # shellcheck source=/dev/null
+        source "$venv_dir/bin/activate"
+        echo "✅ Development environment activated"
+        echo "Python: $(python --version)"
+        echo "Virtual env: $VIRTUAL_ENV"
+    else
+        echo "❌ Virtual environment not found at $venv_dir"
+        echo "Run 'setup-deps' to create it"
+        return 1
+    fi
+}
+
+# Database functions (simplified)
+function setup_local_db() {
+    echo "🗄️  Setting up local databases..."
+    python3 "$HOME/dev/backend/tools/setup_local_databases.py" -s --no-interactive --force-drop-databases
+    export BUDGEA_TOKEN=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select token from bi_manage_token where scope='admin';")
+    echo "✅ Database setup complete. Token: $BUDGEA_TOKEN"
+}
+
+function create_budgea_db_user() {
+    echo "👤 Creating budgea database user..."
+    sudo mysql -uroot -p1245487 -hmariadb -e "CREATE USER IF NOT EXISTS 'budgea'@'%' IDENTIFIED BY '123456'; GRANT ALL PRIVILEGES ON *.* TO 'budgea'@'%' WITH GRANT OPTION;"
+    echo "✅ Database user created"
+}
+
+# Key management (simplified)
+function create_keys() {
+    echo "🔐 Generating encryption keys..."
+    python3 "$HOME/dev/backend/tools/gen_key.py"
+    sudo mkdir -p /etc/bi
+    sudo mv -f frontend.pkey /etc/bi/frontend.pkey
+    sudo mv -f backend.key /etc/bi/backend.key
+    sudo chmod 600 /etc/bi/frontend.pkey /etc/bi/backend.key
+    # Create encrypted backup
+    sudo gpg --batch --yes --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key
+    echo "✅ Keys generated and installed"
+}
+
+# Woob functions
+function update_woob() {
+    local metadata_file="$HOME/dev/woob/woob/woob_metadata/woob_metadata.json"
+    local force_update=false
+
+    # Check for a --force or -f flag
+    if [[ "$1" == "--force" || "$1" == "-f" ]]; then
+        force_update=true
+    fi
+
+    if [[ -f "$metadata_file" && "$force_update" == "false" ]]; then
+        echo "✅ Woob modules metadata already exists. Use --force to regenerate."
+        return 0
+    fi
+
+    echo "🔄 Updating woob modules metadata..."
+    python "$HOME/dev/woob/woob/woob_metadata/build_modules_metadata.py"
+    echo "✅ Woob updated successfully!"
+}
+
+# Client creation (simplified)
+function create_client() {
+    echo "🔧 Creating budgea client..."
+    
+    # Start services in background
+    budgea &
+    local budgea_pid=$!
+    budgea.wsgi &
+    local wsgi_pid=$!
+    
+    # Wait for services to start
+    sleep 10
+    
+    # Create client
+    curl http://localhost:3158/clients -H "Authorization: Bearer $BUDGEA_TOKEN" -d ''
+    # TODO: use vars for mysql user and password
+    export BUDGEA_CLIENT=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select id from bi_client;")
+    sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "update bi_client set redirect_uris='[\"http://localhost:4200/\", \"https://example.org/user/settings\"]' where id=$BUDGEA_CLIENT;"
+    budgeactl config localhost:3158 root.prefix ''
+    
+    # Stop background services
+    kill $budgea_pid $wsgi_pid 2>/dev/null || true
+    
+    echo "✅ Client created: $BUDGEA_CLIENT"
+}
+
+# Log directory setup function
+function setup_log_dirs() {
+    echo "📁 Setting up log directories..."
+    sudo mkdir -p /var/log/bi/data
+    sudo chown -R "$(whoami):$(id -gn)" /var/log/bi
+    echo "✅ Log directories configured with correct permissions"
+}
+
+# Comprehensive setup function
+function full_setup() {
+    echo "🚀 Starting full development environment setup..."
+    
+    cd "$HOME/dev"
+    
+    # Ensure log directories are properly set up
+    setup_log_dirs
+    
+    # Run dependency setup
+    if [[ -x "scripts/setup-deps.sh" ]]; then
+        ./scripts/setup-deps.sh
+    else
+        echo "❌ setup-deps.sh not found or not executable"
+        return 1
+    fi
+    
+    # Activate environment
+    devenv
+    
+    # Run setup tasks
+    cd "$HOME/dev/backend"
+    update_woob
+    create_budgea_db_user
+    
+    # Check if keys exist
+    if [[ ! -f "/etc/bi/frontend.pkey" || ! -f "/etc/bi/backend.key.gpg" ]]; then
+        create_keys
+    else
+        echo "🔐 Keys already exist, skipping key generation"
+    fi
+    
+    setup_local_db
+    create_client
+    
+    echo "✅ Full setup complete!"
+    echo ""
+    echo "🎉 Ready to develop! Try these commands:"
+    echo "  task dev:both     # Start both servers in tmux"
+    echo "  task dev:budgea   # Start budgea server only"
+    echo "  task dev:wsgi     # Start wsgi server only"
+    echo "  task --list       # See all available tasks"
+}
+
+# Auto-activate development environment on login
+if [[ -f "$BUDGEA_VENV_DIR/bin/activate" ]]; then
+    devenv
+else
+    echo "💡 Run 'setup-deps' to set up the development environment"
+fi
+
+# Add task completion if available
+if command -v task &> /dev/null && [[ -f "$HOME/dev/Taskfile.yml" ]]; then
+    echo "📋 Container Taskfile available - run 'task' to see available commands"
+    echo "💡 Task is installed system-wide and works regardless of venv activation"
+fi
