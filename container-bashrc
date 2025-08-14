@@ -32,12 +32,14 @@ function devenv() {
 function setup_local_db() {
     echo "🗄️  Setting up local databases..."
     python3 "$HOME/dev/backend/tools/setup_local_databases.py" -s --no-interactive --force-drop-databases
+    # TODO: do not hardcocde user/pass
     export BUDGEA_TOKEN=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select token from bi_manage_token where scope='admin';")
     echo "✅ Database setup complete. Token: $BUDGEA_TOKEN"
 }
 
 function create_budgea_db_user() {
     echo "👤 Creating budgea database user..."
+    # TODO: do not hardcocde user/pass
     sudo mysql -uroot -p1245487 -hmariadb -e "CREATE USER IF NOT EXISTS 'budgea'@'%' IDENTIFIED BY '123456'; GRANT ALL PRIVILEGES ON *.* TO 'budgea'@'%' WITH GRANT OPTION;"
     echo "✅ Database user created"
 }
@@ -50,9 +52,16 @@ function create_keys() {
     sudo mv -f frontend.pkey /etc/bi/frontend.pkey
     sudo mv -f backend.key /etc/bi/backend.key
     sudo chmod 600 /etc/bi/frontend.pkey /etc/bi/backend.key
-    # Create encrypted backup
-    sudo gpg --batch --yes --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key
-    echo "✅ Keys generated and installed"
+    
+    # Create encrypted backup if GPG is available
+    if command -v gpg &> /dev/null; then
+        sudo gpg --batch --yes --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key
+        echo "✅ Keys generated and installed with GPG backup"
+    else
+        echo "⚠️  GPG not available - skipping encrypted backup"
+        echo "💡 Install GPG with: sudo apt-get update && sudo apt-get install -y gnupg"
+        echo "✅ Keys generated and installed (no encrypted backup)"
+    fi
 }
 
 # Woob functions

@@ -91,8 +91,7 @@ tasks:
     desc: Install all dependencies (backend + woob) - legacy approach
     cmds:
     - echo "📦 Installing dependencies..."
-    - devenv
-    - install_deps
+    - ./install_deps.sh
 
   deps:sync:
     desc: Sync backend dependencies only
@@ -116,13 +115,13 @@ tasks:
     desc: Setup local databases
     cmds:
     - echo "🗄️  Setting up local databases..."
-    - setup_local_db
+    - bash -c "source /home/budgea_user/dev/container-bashrc && setup_local_db"
 
   db:user:
     desc: Create budgea database user
     cmds:
     - echo "👤 Creating budgea database user..."
-    - create_budgea_db_user
+    - bash -c "source /home/budgea_user/dev/container-bashrc && create_budgea_db_user"
 
   # Woob tasks
   woob:update:
@@ -138,17 +137,29 @@ tasks:
     - bash -c "source {{.VENV_DIR}}/bin/activate && woob update"
 
   # Setup tasks
+  setup:gpg:
+    desc: Install GPG if not available
+    cmds:
+    - |
+      if ! command -v gpg &> /dev/null; then
+        echo "📦 Installing GPG..."
+        sudo apt-get update && sudo apt-get install -y gnupg
+      else
+        echo "✅ GPG already available"
+      fi
+
   setup:keys:
     desc: Generate and setup encryption keys
     cmds:
     - echo "🔐 Setting up encryption keys..."
-    - create_keys
+    - task setup:gpg
+    - bash -c "source /home/budgea_user/dev/container-bashrc && create_keys"
 
   setup:client:
     desc: Create budgea client
     cmds:
     - echo "🔧 Creating budgea client..."
-    - create_client
+    - bash -c "source /home/budgea_user/dev/container-bashrc && create_client"
 
   setup:full:
     desc: Run complete setup (recommended - uses new lean approach)

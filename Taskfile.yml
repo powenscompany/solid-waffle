@@ -13,14 +13,14 @@ tasks:
     - task --list
     silent: true
 
-  setup:
-  # TODO: don't need etc_bi, do not simply copy .env as it should be filled by the user before mounting the container
-    desc: Initial setup - create .env and required directories
-    silent: true
-    cmds:
-    - test -f .env || cp .env.example .env
-    - mkdir -p etc_bi session_folders
-    - echo "✅ Setup complete!"
+  # setup:
+  # # TODO: don't need etc_bi, do not simply copy .env as it should be filled by the user before mounting the container
+  #   desc: Initial setup - create .env and required directories
+  #   silent: true
+  #   cmds:
+  #   - test -f .env || cp .env.example .env
+  #   - mkdir -p etc_bi session_folders
+  #   - echo "✅ Setup complete!"
 
   build:
     desc: Build Docker images (development)
@@ -62,6 +62,7 @@ tasks:
     cmds:
     - '{{.DC}} down'
 
+  # TODO: clean images and previous builds as well
   clean:
     desc: Stop services and remove containers, networks, and volumes
     cmds:
@@ -150,25 +151,23 @@ tasks:
 
   install-woob:
     desc: Install woob modules in container
-    # Note: Makefile uses 'install_woob' but the function present is 'update_woob' in additional_bashrc.
-    # If needed, replace with: devenv && update_woob
     cmds:
-    - "{{.DC}} exec backend bash -c 'devenv && install_woob'"
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && task woob:update'"
 
   setup-db:
     desc: Setup local database in container
     cmds:
-    - "{{.DC}} exec backend bash -c 'devenv && setup_local_db'"
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && task db:setup'"
 
   test:backend:
     desc: Run backend tests
     cmds:
-    - "{{.DC}} exec backend bash -c 'devenv && cd /home/budgea_user/dev/budgea && python -m pytest tests/'"
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && task test:backend'"
 
   test:woob:
     desc: Run woob tests
     cmds:
-    - "{{.DC}} exec backend bash -c 'devenv && cd /home/budgea_user/dev/woob && python -m pytest'"
+    - "{{.DC}} exec backend bash -c 'cd /home/budgea_user/dev && task test:woob'"
 
   check-env:
     desc: Check if environment is properly configured

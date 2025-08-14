@@ -104,7 +104,7 @@ task setup-db
 
 ## Development Workflow
 
-1. **Initial Setup**: Run `./setup.sh` to initialize environment
+1. **Initial Setup**: Run `task setup` to initialize environment
 2. **Container Access**: Use `task shell` to enter development container
 3. **Full Setup**: Run `task setup:full` inside container for complete initialization
 4. **Development**: Edit code locally, changes reflect immediately in container

@@ -13,7 +13,7 @@
     ├── .env                # Environment variables
     ├── docker-compose.yml  # Service orchestration
     ├── Dockerfile          # Container definition
-    ├── setup.sh            # Initial setup script
+    # setup.sh removed - using task-based setup instead
     └── scripts/            # Setup and utility scripts
 ```
 
@@ -27,9 +27,9 @@ solid-waffle/
 ├── Dockerfile.lean           # Lean container approach
 ├── Makefile                  # Legacy task runner
 ├── Taskfile.yml             # Modern task runner (host)
-├── setup.sh                 # Initial project setup
+# setup.sh removed - using task-based setup instead
 ├── install_deps.sh          # Legacy dependency installer
-├── additional_bashrc        # Legacy container bashrc additions
+# additional_bashrc removed - using container-bashrc instead
 ├── container-bashrc         # Clean container bashrc additions
 ├── container-Taskfile.yml   # Container-specific tasks
 ├── scripts/

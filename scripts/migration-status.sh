@@ -59,11 +59,7 @@ else
     log_warning "Legacy setup script missing: install_deps.sh"
 fi
 
-if [[ -f "additional_bashrc" ]]; then
-    log_info "Legacy bashrc available: additional_bashrc"
-else
-    log_warning "Legacy bashrc missing: additional_bashrc"
-fi
+# Legacy additional_bashrc has been removed - using container-bashrc now
 
 if [[ -f "container-bashrc" ]]; then
     log_success "New bashrc available: container-bashrc"

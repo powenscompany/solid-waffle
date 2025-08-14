@@ -20,7 +20,7 @@ services:
     - ./scripts:/home/budgea_user/dev/scripts:ro
       # Mount container-specific bashrc
     - ./container-bashrc:/home/budgea_user/dev/container-bashrc:ro
-      # Mount legacy files for backward compatibility
+      # Mount legacy install script
     - ./install_deps.sh:/home/budgea_user/dev/install_deps.sh:ro
       # Mount configuration and data directories
     - ./session_folders:/var/log/bi/data

@@ -1,132 +1,58 @@
 # 🧇 Solid Waffle - Powens Full Stack Development Environment
 
-This project provides a Docker-based development environment for the complete Powens stack, allowing you to test the full application locally on both macOS and Debian/Linux systems using a Debian Bookworm container. While the backend installation is the most complex part (hence the containerization), this setup includes webview, woob, backend, and apishell components.
+A Docker-based development environment for the complete Powens stack, enabling local testing of the full application on both macOS and Linux systems using a Debian Bookworm container.
 
-## Architecture Considerations
+## 🚀 Quick Start
 
-This setup is optimized for development on multiple platforms with architecture-specific optimizations:
+> **First time setup?** Make sure to follow all installation steps including `task build` to create the Docker image.
 
-### Fast Development (Recommended)
+### Prerequisites
 
-- **File**: `Dockerfile`
-- **Platform**: Native architecture (ARM64 on Apple Silicon, x86_64 on Intel/AMD)
-- **Use case**: Daily development, testing local changes
-- **Build**: `make build` or `docker-compose build`
-- **Performance**: Fast on both ARM Macs and x86_64 Linux systems
+1. **Task Runner**: Install the Task tool on your host system:
+   - **Installation guide**: https://taskfile.dev/docs/installation
+   - **Quick install** (most systems):
+     ```bash
+     # macOS (Homebrew)
+     brew install go-task/tap/go-task
+     
+     # Linux (snap)
+     sudo snap install task --classic
+     
+     # Or use install script
+     sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
+     ```
 
-### Production-Exact Testing
+2. **Directory Structure**: Ensure your development directory follows this structure:
 
-- **File**: `Dockerfile.production`
-- **Platform**: AMD64 with emulation when needed (exact production match)
-- **Use case**: Final testing before deployment, debugging production-specific issues
-- **Build**: `make build-production`
+   ```
+   /Users/username/dev/  (or /home/username/dev/ on Linux)
+   ├── backend/                # Backend source code (mounted for live changes)
+   ├── woob/                   # Woob source code (mounted for live changes)
+   ├── apishell/               # API shell utilities (mounted for live changes)
+   ├── proxynet.pem            # ProxyNet certificate (required)
+   └── solid-waffle/           # This project
+       ├── .env                # Your environment variables
+       ├── docker-compose.yml  # Service orchestration
+       ├── Taskfile.yml        # Host task automation
+       └── ...
+   ```
 
-⚠️ **Performance Notes**:
+3. **AWS ECR Access**: You need access to the Powens Docker registry for the webview image.
 
-- **ARM Macs**: Production Dockerfile will be slower due to x86_64 emulation
-- **x86_64 Linux/Debian**: Both Dockerfiles will have similar performance
-- **Intel Macs**: Native performance for both options
+### Installation Steps
 
-## Features
-
-- 🐳 **Full Stack Environment**: Complete Powens stack (webview, backend, woob, apishell) in containers
-- 🖥️ **Multi-platform**: Works on ARM64 Macs, Intel Macs, and x86_64 Linux/Debian with optimized performance
-- 🏭 **Production-like environment**: Uses the same base image and configuration as production
-- 🔁 **Live code mounting**: Local backend, woob, and apishell changes are immediately reflected in the container
-- 🌐 **Webview integration**: Frontend served from pre-built Docker image (no local repo needed)
-- 🔐 **Environment secrets**: Supports your shell environment variables (zsh/bash)
-- 🗄️ **Database setup**: Includes MariaDB with automated setup scripts
-- ⚙️ **Gearman support**: Includes gearman job server for background tasks
-- 🔧 **Development tools**: Pre-configured with all necessary development utilities
-
-## Stack Components
-
-| Component | Purpose | Volume Mounted | Development Access | Source |
-|-----------|---------|----------------|-------------------|---------|
-| **Webview** | Frontend UI | ❌ (pre-built image) | Via browser | GitLab Registry |
-| **Backend** | API Server | ✅ (live changes) | Direct code editing | Local repository |
-| **Woob** | Banking connectors | ✅ (live changes) | Direct code editing | Local repository |
-| **Apishell** | API utilities | ✅ (live changes) | Direct code editing | Local repository |
-
-**Development Strategy**: Only woob, backend, and apishell are mounted as volumes since these are the components developers typically modify and need to test changes on. The webview uses a pre-built Docker image from GitLab registry and connects to your live backend changes.
-
-## Job Manager: Gearman vs Celery
-
-This development environment uses **Gearman** as the job manager for background tasks. While the backend supports both Gearman and Celery, we chose Gearman for the following reasons:
-
-### Why Gearman for Development?
-
-- **Simpler setup**: Single container vs multiple (RabbitMQ + Redis for Celery)
-- **Lighter resource usage**: Better for local development on laptops and workstations
-- **Faster startup**: Fewer services to initialize and orchestrate
-- **Production alignment**: Matches our current production configuration
-
-### Gearman vs Celery Comparison
-
-| Feature | Gearman | Celery |
-|---------|---------|---------|
-| Infrastructure | Single gearman server | RabbitMQ + Redis |
-| Containers needed | 1 | 3+ |
-| SSL/TLS | Basic | Full support |
-| Monitoring | Custom scripts | Built-in (Flower) |
-| Complexity | Low | High |
-
-## Directory Structure
-
-Ensure your development directory follows this structure:
-
-**macOS Example**:
-
-```
-/Users/bob.sponge/dev/
-├── backend/                 # Backend source code (mounted for live changes)
-├── woob/                   # Woob source code (mounted for live changes)
-├── apishell/               # API shell utilities (mounted for live changes)
-├── proxynet.pem            # ProxyNet certificate
-└── solid-waffle/           # This project
-    ├── Dockerfile
-    ├── docker-compose.yml
-    ├── setup.sh
-    └── .env                # Your environment variables
-```
-
-**Debian/Linux Example**:
-
-```
-/home/bob.sponge/dev/
-├── backend/                 # Backend source code (mounted for live changes)
-├── woob/                   # Woob source code (mounted for live changes)
-├── apishell/               # API shell utilities (mounted for live changes)
-├── proxynet.pem            # ProxyNet certificate
-└── solid-waffle/           # This project
-    ├── Dockerfile
-    ├── docker-compose.yml
-    ├── setup.sh
-    └── .env                # Your environment variables
-```
-
-**Volume Mounting Strategy**:
-
-- ✅ **Mounted**: `backend/`, `woob/`, `apishell/` - for live development
-- ❌ **Not Mounted**: `webview/` - uses pre-built Docker image, no local repository needed
-
-<!-- TODO: not GITLAB!!! -->
-**Note**: The webview component is served from a pre-built Docker image (`registry.gitlab.com/budget-insight/webview:latest`), eliminating the need for a local webview repository. The `gearman==2.0.3` dependency is handled automatically through the backend's `pyproject.toml` and your private package registry.
-
-## Quick Start
-
-1. **Setup environment variables**:
+1. **Configure Environment**:
 
    ```bash
    cd solid-waffle
    cp .env.example .env
-   # Edit .env with your actual values from shell environment (~/.zshrc, ~/.bashrc, etc.)
+   # Edit .env with your actual values (see Environment Configuration section)
    ```
 
-2. **Run setup script**:
+2. **Build Docker Image**:
 
    ```bash
-   ./setup.sh
+   task build  # Builds the bookworm-powens-stack image
    ```
 
 3. **Login to ECR** (if not already done):
@@ -135,414 +61,411 @@ Ensure your development directory follows this structure:
    task ecr-login
    ```
 
-4. **Start the full stack**:
+4. **Run Initial Setup**:
 
-   For daily development (native architecture):
+   ```bash
+   task setup  # Creates required directories and validates environment
+   ```
+
+5. **Start Services**:
 
    ```bash
    task up
-   # or
-   docker-compose up -d
    ```
 
-   For production-exact testing (x86_64 emulation on ARM):
-
+6. **Enter Container and Complete Setup**:
+   <!-- TODO: automate `cd dev`-->
    ```bash
-   docker-compose --profile production up -d
-   # or
-   make up-production
-   ```
-
-4. **Connect to the container**:
-
-   Development version:
-
-   ```bash
-   docker-compose exec backend bash
-   # or 
-   make shell
-   ```
-
-   Production version:
-
-   ```bash
-   make shell-production
-   ```
-
-5. **Run full setup inside container**:
-
-   ```bash
-   # New lean container approach (recommended):
+   task shell
+   cd dev
+   # Inside container:
    task setup:full
-   
-   # Or traditional way (legacy):
-   task setup:full:legacy
    ```
 
-6. **Access the application**:
-   - **Webview (Frontend)**: <http://localhost:8080>
+7. **Access Application**:
+   <!-- TODO: should be port 4200 for webview, to fix when fully implementing webview -->
+   - **Frontend (Webview)**: <http://localhost:8080>
    - **Backend API**: <http://localhost:3158>
    - **API Documentation**: <http://localhost:3158/docs>
 
-## Advanced Usage
+## 📋 Installation Sequence Explained
 
-### Selective Service Startup
+### 1. Environment File Creation (.env)
 
-You can start specific components based on your development needs:
+The `.env` file contains your personal configuration that gets loaded into the container:
 
 ```bash
-# Start only backend services (no webview)
-docker-compose up -d backend mariadb gearmand
-
-# Start only webview with existing backend
-docker-compose up -d webview
-
-# Start production stack for testing
-docker-compose --profile production up -d
-
-# Start production webview only (connects to production backend on port 3159)
-docker-compose up -d webview-production
+# Copy template and customize
+cp .env.example .env
 ```
 
-### Multiple Environment Testing
+**Key variables to customize**:
 
-Test different configurations simultaneously:
+- `ECR_REGISTRY`: Docker registry URL for webview images
+- `WEBVIEW_RELEASE_TAG`: Specific webview version (defaults to 'latest')
+- Database credentials and API configuration
+- SSL certificate paths
+
+### 2. File and Folder Mounting
+
+Docker Compose automatically mounts:
+
+**Source Code (Live Development)**:
+
+- `../backend` → `/home/budgea_user/dev/backend` (DB, API and aggregation orchestrator)
+- `../woob` → `/home/budgea_user/dev/woob` (scraping connectors)
+- `../apishell` → `/home/budgea_user/dev/apishell` (API utilities)
+
+**Configuration Files**:
+
+- `./container-Taskfile.yml` → `/home/budgea_user/dev/Taskfile.yml` (task automation)
+- `./container-bashrc` → `/home/budgea_user/dev/container-bashrc` (bash functions)
+- `./scripts/` → `/home/budgea_user/dev/scripts/` (setup scripts)
+
+**Persistent Data**:
+
+- `backend_venv` volume → `/home/budgea_user/dev/backend/.venv` (Python virtual environment)
+- `mariadb_data` volume → `/var/lib/mysql` (database persistence)
+
+**Security**:
+
+- `~/.ssh` → `/home/budgea_user/.ssh` (read-only SSH keys)
+- `../proxynet.pem` → `/home/budgea_user/dev/proxynet.pem` (read-only SSL certificate)
+
+### 3. Essential Task Commands
+
+**Quick Start Commands**:
 
 ```bash
-# Development environment
-docker-compose up -d
-# Access at: http://localhost:8080 (webview) and http://localhost:3158 (backend)
-
-# Production environment (in addition to development)
-docker-compose --profile production up -d
-# Access at: http://localhost:8081 (webview) and http://localhost:3159 (backend)
+task up           # Start all services
+task shell        # Enter container
+task down         # Stop all services
+task logs         # View service logs
 ```
 
-### Webview Version Control
-
-By default, the webview uses the `latest` image. You can specify a different version:
+**Inside Container - Setup Commands**:
 
 ```bash
-# Use latest version (default)
-docker-compose up -d
-
-# Use specific version via environment variable
-WEBVIEW_RELEASE_TAG=4.48.0 docker-compose up -d
-
-# Or set in .env file
-echo "WEBVIEW_RELEASE_TAG=4.48.0" >> .env
-docker-compose up -d
+task setup:full   # Complete setup (recommended)
+task setup:environment  # Environment setup only
+task woob:update  # Update woob modules metadata
+task db:setup     # Setup databases
+task setup:keys   # Generate encryption keys
 ```
 
-## Platform-Specific Notes
-
-### macOS (Intel & Apple Silicon)
-
-- **Docker Desktop**: Ensure sufficient resources allocated (8GB+ RAM recommended)
-- **Performance**: ARM Macs benefit most from native ARM64 builds
-- **File sharing**: Docker Desktop handles volume mounting automatically
-
-### Debian/Linux
-
-- **Docker Engine**: Install via package manager or official Docker installation
-- **Permissions**: Ensure your user is in the `docker` group:
-
-  ```bash
-  sudo usermod -aG docker $USER
-  # Log out and back in for changes to take effect
-  ```
-
-- **Performance**: Native x86_64 performance, both Dockerfiles work well
-- **File permissions**: Volume mounts preserve local file ownership
-
-### Architecture Detection
-
-The setup automatically detects your platform:
+**Inside Container - Development Commands**:
 
 ```bash
-# Check your architecture
-uname -m
-# arm64 (Apple Silicon) / x86_64 (Intel/AMD)
-
-# Docker will use the appropriate base image
-docker info | grep Architecture
+task dev:both     # Start both servers in tmux
+task dev:budgea   # Start budgea server only
+task dev:wsgi     # Start wsgi server only
+task dev:attach   # Attach to tmux session
+task dev:stop     # Stop development servers
 ```
 
-## Available Commands (Inside Container)
+### 4. Environment Installation Process
 
-| Command | Description |
-|---------|-------------|
-| `devenv` | Activate Python virtual environment |
-| `gm` | Start gearman job server |
-| `full_setup` | Complete setup (dependencies, database, woob, keys, client) |
-| `install_deps` | Install all Python dependencies (backend + woob) |
-| `setup_local_db` | Setup local database only |
-| `update_woob` | Update woob modules |
-| `keys` | Generate frontend/backend keys |
-| `create_client` | Create API client |
+When you run `task setup:environment`, here's what happens:
 
-## Environment Variables
+#### A. Container Bashrc Setup
 
-Key environment variables from your shell that should be in `.env`:
+- Sources `/home/budgea_user/dev/container-bashrc` with development functions
+- Sets up PATH and PYTHONPATH environment variables
+- Configures aliases and helper functions
+- Auto-activates Python virtual environment on login
+
+#### B. Python Virtual Environment
+
+- **Location**: `/home/budgea_user/dev/backend/.venv` (Docker volume)
+- **Manager**: UV (fast Python package manager)
+- **Python Version**: 3.9.19 It matches production and has best performance for every platform (need more CPython build otherwise)
+- **Isolation**: Separate from host system to avoid conflicts
+
+#### C. System Paths Configuration
 
 ```bash
-# SSH and API Keys
-BI_SSH_KEY=/home/budgea_user/.ssh/id_rsa
+# Automatically configured paths:
+PATH=$PATH:$HOME/dev/backend/scripts:$HOME/.local/bin
+PYTHONPATH=$PYTHONPATH:$HOME/dev/backend:$HOME/dev/woob
+BUDGEA_VENV_DIR="$HOME/dev/backend/.venv"
+```
 
-# UV_INSECURE_HOST=*
+#### D. System Dependencies
+
+The container comes pre-installed with:
+
+- Python 3.9.19 and development tools
+- UV package manager
+- Task runner
+- Database clients (MySQL/MariaDB)
+- SSH and networking tools
+- tmux for session management
+
+## 🏗️ Architecture Overview
+
+### Stack Components
+
+| Component    | Purpose            | Development Access  | Source           |
+| ------------ | ------------------ | ------------------- | ---------------- |
+| **Backend**  | API Server         | ✅ Live code editing | Local repository |
+| **Woob**     | Banking connectors | ✅ Live code editing | Local repository |
+| **Apishell** | API utilities      | ✅ Live code editing | Local repository |
+| **Webview**  | Frontend UI        | ❌ Pre-built image   | ECR Registry     |
+| **MariaDB**  | Database           | 🔧 Via container     | Docker image     |
+| **Gearman**  | Job queue          | 🔧 Via container     | Docker image     |
+
+### Why This Architecture?
+
+- **Live Development**: Only components you actively develop (backend, woob, apishell) are mounted
+- **Production Parity**: Uses same base images and configuration as production
+- **Simplified Frontend**: Webview uses pre-built image, no local setup needed
+- **Isolated Dependencies**: Virtual environment prevents host system conflicts
+
+## 🔧 Environment Configuration
+
+### Required Environment Variables
+
+Create your `.env` file based on `.env.example`:
+
+```bash
+# Docker Registry
+ECR_REGISTRY=737968113546.dkr.ecr.eu-west-3.amazonaws.com
+WEBVIEW_RELEASE_TAG=latest
+
+# Database Configuration
+MYSQL_ROOT_PASSWORD=1245487
+MYSQL_DB_PASSWORD=qwer
 
 # Backend Configuration
 PW_CONFIG_FILES=backend.conf
-PW_API_PLUGINS=* -jobs -background...
+PW_API_PLUGINS=* -jobs -background -bddf -cleaner -encryption_migration -file_migration -ocr -oidc -payment_background_worker -regulation -categorization -categorization_ds
+PW_API_RESTART_ON_UPDATE=1
+PW_API_MANDATORY_TRANSACTIONS_PAGINATION=1
+PW_SECRETS_PATH=/etc/bi/powens_secrets.json
 ```
 
-**Shell Environment Sources**:
+### AWS ECR Authentication
 
-- **macOS zsh**: `~/.zshrc`
-- **Linux bash**: `~/.bashrc` or `~/.bash_profile`
-- **Linux zsh**: `~/.zshrc`
+The webview image is hosted on AWS ECR. You need proper authentication:
 
-**ProxyNet Certificate Handling**: The `proxynet.pem` file is mounted from your local dev directory into the container and configured via SSL environment variables. This allows for dynamic certificate updates without rebuilding the container image.
+1. **Configure AWS CLI** with your credentials
+2. **Add to `~/.aws/credentials`**:
 
-## Services
+   ```ini
+   [sso]
+   sso_start_url = https://d-80672338a9.awsapps.com/start
+   sso_region = eu-west-3
 
-| Service | Port | Description | Access | Profile |
-|---------|------|-------------|--------|---------|
-| Webview (Frontend) | 8080 | Development frontend | <http://localhost:8080> | default |
-| Backend API | 3158 | Development backend API | <http://localhost:3158> | default |
-| Webview (Production) | 8081 | Production frontend | <http://localhost:8081> | production |
-| Backend API (Production) | 3159 | Production backend API | <http://localhost:3159> | production |
-| MariaDB | 3306 | Database server | Internal | default |
-| Gearman | 4730 | Job queue server | Internal | default |
-| SFTP | 2222 | Test SFTP server | Internal | default |
+   [artifacts]
+   sso_start_url = https://d-80672338a9.awsapps.com/start
+   sso_region = eu-west-3
+   sso_account_id = 737968113546
+   sso_role_name = DevelopperRoAccess
+   ```
 
-## 🚀 Lean Container Architecture (NEW!)
+3. **Login**:
 
-We've migrated to a **lean container approach** following industry best practices:
+   ```bash
+   # auto
+   task ecr-login
 
-- **Dockerfile**: Only system dependencies (faster builds, smaller images)
-- **Runtime setup**: Python packages and app configuration handled at runtime
-- **No conflicts**: Single package manager (UV) for all Python dependencies
-- **Better performance**: Improved Docker layer caching and build times
+   # or use manual:
+   aws sso login --profile artifacts
+   # then:
+   aws ecr get-login-password --profile artifacts --region eu-west-3 | docker login --username AWS --password-stdin 737968113546.dkr.ecr.eu-west-3.amazonaws.com
+   ```
 
-## Improved Dependency Management
+## 🛠️ Development Workflow
 
-We've introduced a cleaner dependency management system with better separation of concerns:
+### Daily Development
 
-### New Task-Based Workflow (Recommended)
+1. **Start Environment**:
 
-Inside the container, you now have access to a comprehensive task system:
+   ```bash
+   task up
+   task shell
+   ```
+
+2. **Start Development Servers**:
+
+   ```bash
+   task dev:both  # Starts both budgea and budgea.wsgi in tmux
+   ```
+
+3. **Make Code Changes**:
+   - Edit files in `../backend/`, `../woob/`, or `../apishell/`
+   - Changes are immediately available in the container
+
+4. **Test Changes**:
+   - Access webview at <http://localhost:8080>
+   - API available at <http://localhost:3158>
+
+5. **Manage Development Session**:
+
+   ```bash
+   task dev:attach  # Attach to tmux session
+   task dev:stop    # Stop servers
+   ```
+
+### Database Operations
 
 ```bash
-# See all available tasks
-task
+# Inside container
+task db:setup     # Setup local databases
+task db:user      # Create budgea database user
 
-# Install dependencies (replaces install_deps)
-task deps:install
-
-# Start development servers in tmux
-task dev:both
-
-# Run full setup (replaces full_setup function)
-task setup:full
-
-# Individual setup steps
-task db:setup      # Setup database
-task woob:update   # Update woob modules
-task setup:keys    # Generate encryption keys
+# Direct database access
+docker-compose exec mariadb mysql -uroot -p1245487
 ```
 
-### Development Server Management
+### Woob Module Management
 
 ```bash
-# Start both servers in tmux (recommended)
-task dev:both
-
-# Attach to running tmux session
-task dev:attach
-
-# Stop development servers
-task dev:stop
-
-# Start individual servers
-task dev:budgea    # Just budgea server
-task dev:wsgi      # Just wsgi server
+# Inside container
+task woob:update        # Update woob modules metadata (build_modules_metadata.py)
+task woob:update-repos  # Update woob repositories (woob update command)
 ```
 
-### Legacy Support
+## 🔍 Available Services
 
-The old functions still work for backward compatibility:
+| Service | Port | Description | URL                   |
+| ------- | ---- | ----------- | --------------------- |
+| Webview | 8080 | Frontend UI | <http://localhost:8080> |
+| Backend | 3158 | API Server  | <http://localhost:3158> |
+| MariaDB | 3306 | Database    | Internal only         |
+| Gearman | 4730 | Job Queue   | Internal only         |
 
-- `full_setup` - Complete setup
-- `install_deps` - Install dependencies  
-- `devenv` - Activate environment
+## 🐛 Troubleshooting
 
-See `DEPENDENCY_MIGRATION.md` for detailed migration guide.
+### Build Issues
 
-## Development Workflow
+**Docker build fails**:
 
-1. **Make changes** to backend, woob, or apishell code in your local directories
-2. **Changes are immediately available** in the container (via volume mounts)
-3. **Test your changes** in the full stack environment through the webview
-4. **Use the same tools** and configurations as production
-5. **Debug and iterate** with live reloading
+```bash
+# Try building with verbose output for debugging
+task build:debug
+# or
+docker-compose build --progress=plain --no-cache
+```
 
-## Troubleshooting
+**Image not found error**:
 
-### Container won't start
+- Make sure you've run `task build` before `task up`
+- Check if the build completed successfully
 
-- Check that all required directories exist (backend, woob, apishell)
-- Verify `.env` file is properly configured
-- Ensure Docker has enough resources allocated
-- **Linux**: Verify user is in docker group and Docker daemon is running
+### Container Issues
 
-### Webview connection issues
+**Container won't start**:
 
-- Ensure backend container is running: `docker-compose ps`
-- Check if webview can reach backend: `docker-compose logs webview`
-- Verify network connectivity: `docker network ls`
-- **ECR Authentication Error (403 Forbidden)**: Run `task ecr-login` to authenticate with AWS ECR
-- Check ECR authentication status: `task check-ecr-auth`
+- Verify all required directories exist (backend, woob, apishell)
+- Check `.env` file configuration
+- Ensure Docker has sufficient resources
+- Make sure the Docker image was built successfully (`task build`)
 
-### Database connection issues
+**Permission issues**:
 
-- Ensure MariaDB container is running: `docker-compose ps`
-- Check database credentials in `.env`
-- Run `create_budgea_db_user` inside container
+- Linux: Add user to docker group: `sudo usermod -aG docker $USER`
+- Restart Docker daemon if needed
 
-### Frontend/Backend connection issues
+### ECR Authentication Issues
 
-- Verify backend is running on port 3158
-- Check webview configuration points to correct backend URL
-- Ensure all services are in the same Docker network
+**403 Forbidden when pulling webview**:
 
-### SSL/Certificate issues
+```bash
+task ecr-login
+# or check authentication status:
+task check-ecr-auth
+```
 
-- Verify `proxynet.pem` exists in your dev directory and is readable
-<!-- - Ensure UV_INSECURE_HOST is set to `*` -->
-- The certificate is mounted as read-only from your local `../proxynet.pem`
+### Database Connection Issues
 
-### Woob modules not found
+**Can't connect to database**:
 
-- Run `install_woob` inside container
-- Check that woob directory is properly mounted
-- Verify virtual environment is activated
+```bash
+# Inside container
+task db:user  # Create database user
+# Check if MariaDB is running:
+docker-compose ps mariadb
+```
 
-### Platform-specific issues
+### Development Server Issues
 
-#### macOS
+**Servers won't start**:
 
-- **Docker Desktop issues**: Restart Docker Desktop or increase resource limits
-- **Volume mounting slow**: Consider using delegated mounts or Docker Desktop settings
-- **ARM compatibility**: Use native ARM builds when possible
+```bash
+# Check if virtual environment is activated
+devenv
+# Check if dependencies are installed
+task setup:environment
+```
 
-#### Debian/Linux
+**Can't access webview**:
 
-- **Permission denied**: Ensure user is in docker group: `sudo usermod -aG docker $USER`
-- **Docker daemon not running**: Start with `sudo systemctl start docker`
-- **SELinux issues**: May need to configure SELinux contexts for volume mounts
+- Ensure backend is running on port 3158
+- Check if all services are up: `docker-compose ps`
+- Verify network connectivity between containers
 
-### Production vs Development
+## 🔐 Security Notes
 
-- Use `docker-compose up -d` for native architecture development (fast on all platforms)
-- Use `docker-compose --profile production up -d` for production-exact testing (slower on ARM Macs only)
-- Production services run on different ports to avoid conflicts
-
-## Security Notes
-
-- Never commit your `.env` file
-- Use `.env.example` as a template
+- Never commit your `.env` file (it's in `.gitignore`)
 - SSH keys are mounted read-only
-- Secrets are handled through environment variables, not build args
-- Webview image is pulled from secure GitLab registry
+- SSL certificates are mounted read-only
+- Database passwords should be changed for production use
+- ECR authentication tokens expire and need renewal
 
-## Quick Installation Summary
+## 📚 Additional Resources
 
-This environment allows you to quickly install and run the complete Powens stack on any platform:
+### Task Commands Reference
 
-1. **Clone required repositories** (backend, woob, apishell) in your dev directory
-2. **Configure environment** with `.env` file (from your shell environment)
-3. **Run setup script** to initialize everything
-4. **Log to the Docker repository** if not already done (see below)
-5. **Start with one command** (`docker-compose up -d`)
+**Host Commands** (outside container):
 
-   The `-d` argument stands for "detached mode," which means Docker Compose will start all services in the background, allowing you to continue using your terminal for other tasks.
-6. **Access the full application** at <http://localhost:8080>
-
-Perfect for onboarding new developers or testing full-stack changes locally on macOS, Debian, or any Linux distribution! 🚀
-
-**No local webview repository needed** - the frontend is served from a pre-built Docker image! 🎉
-
-## Access to Powens Repository (ECR)
-
-Docker images are stored on ECR (Elastic Container Registry), and hence we need access to it.
-
-If AWS CLI isn't installed on your machine, use
-[the official instructions](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-to get it running.
-
-### AWS Configuration
-
-Your AWS configuration must contain the `[sso]` and `[artifacts]` sections to be able to download secrets from AWS.
-These secrets are necessary to install our private version of gearman client, and some NPM packages.
-
-Add the following to `~/.aws/credentials` (create the file if it doesn't exist):
-
-```ini
-[sso]
-sso_start_url = https://d-80672338a9.awsapps.com/start
-sso_region = eu-west-3
-
-[artifacts]
-sso_start_url = https://d-80672338a9.awsapps.com/start
-sso_region = eu-west-3
-sso_account_id = 737968113546
-sso_role_name = DevelopperRoAccess
+```bash
+task setup              # Initial setup (directories, validation)
+task build              # Build Docker image
+task up/down/restart    # Service management
+task shell              # Enter container
+task logs               # View logs
+task ecr-login          # ECR authentication
 ```
 
-### Login Instructions
+**Container Commands** (inside container):
 
-1. **Log in using JumpCloud:**
+```bash
+task setup:full         # Complete setup
+task dev:both/budgea/wsgi  # Development servers
+task db:setup/user      # Database operations
+task woob:update        # Woob operations
+task test:backend/woob  # Run tests
+task clean:cache        # Clean Python cache
+```
 
-    ```bash
-    aws sso login --profile artifacts
-    ```
+### Legacy Function Support
 
-2. **Connect to the Docker repository:**
+These bash functions are still available for backward compatibility:
 
-    ```bash
-    aws ecr get-login-password --profile artifacts --region eu-west-3 \
-    | docker login --username AWS --password-stdin 737968113546.dkr.ecr.eu-west-3.amazonaws.com
-    ```
+- `devenv` - Activate virtual environment
+- `full_setup` - Complete setup (use `task setup:full` instead)
+- `install_deps` - Install dependencies (use `task setup:environment` instead)
+- `update_woob` - Update woob (use `task woob:update` instead)
 
-You can view the available images in the ECR console: [https://eu-west-3.console.aws.amazon.com/ecr/private-registry/repositories?region=eu-west-3](https://eu-west-3.console.aws.amazon.com/ecr/private-registry/repositories?region=eu-west-3)
+### File Structure Summary
 
-## Usage
+```
+solid-waffle/
+├── .env                    # Your environment configuration
+├── .env.example           # Environment template
+├── docker-compose.yml     # Service definitions
+├── Dockerfile             # Container definition
+├── container-bashrc       # Container bash configuration
+├── container-Taskfile.yml # Container task definitions
+├── Taskfile.yml          # Host task definitions
+├── install_deps.sh        # Legacy dependency installer (backward compatibility)
+└── scripts/              # Setup and utility scripts
+    ├── setup-environment.sh
+    ├── validate-setup.sh
+    └── ...
+```
 
-### API
+---
 
-<!-- TODO: adapt my own, old doc -->
-- create user using the manage token
-
-  ```shell
-  curl http://localhost:3158/auth/init -H 'Authorization: Bearer yyyyyyy' -d ''
-  {"auth_token": "xxxxxxx", "type": "permanent", "id_user": 1}%
-  ```
-
-- create client
-
-  ```shell
-  curl http://localhost:3158/clients -H 'Authorization: Bearer yyyyyyy' -d ''
-  {"id": 46915388, "name": "Localhost:3158", "redirect_uri": "https://example.org/user/settings", "redirect_uris": ["https://example.org/user/settings"], "public_key": null, "config": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "information": {"primary_color": null, "secondary_color": null, "description": null, "description_banks": null, "description_providers": null}, "pro": false, "id_logo": null, "secret": "zzzzzzzz"}%
-  ```
-
-- <https://gitlab.com/powenscompany/dev/tools/tech-docs/-/wikis/backend/Add-weboob-connection>
-
-  ```shell
-  curl -H 'Authorization: Bearer xxxxxxx' http://localhost:3158/users/me/connections -d 'login=test' -d 'password=1234' -d 'id_connector=59'
-  {"id": 1, "id_user": 1, "id_connector": 59, "last_update": null, "created": "2023-10-25 11:06:49", "active": true, "last_push": null, "next_try": null, "state": null, "error": null, "error_message": null, "expire": null, "id_provider": 59, "id_bank": 59, "connector_uuid": "338178e6-3d01-564f-9a7b-52ca442459bf"}%
-  ```
-
-- webview: `localhost:4200/manage?client_id=&code=&connector_capabilities=bank` —> `localhost:4200/manage?client_id=46915388&code=xxxxxxx&connector_capabilities=bank`
-
-`localhost:4200/connect?client_id=67075776&connector_capabilities=bank&redirect_uri=https://example.org/user/settings&max_connections=2`
+🎉 **Ready to develop!** This environment provides everything you need to work on the complete Powens stack locally with production-like configuration.

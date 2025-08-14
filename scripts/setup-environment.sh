@@ -144,19 +144,6 @@ setup_python_environment() {
     log_success "Virtual environment created and activated: $(python --version)"
 }
 
-# # Install system tools into virtual environment
-# install_development_tools() {
-#     log_info "Installing development tools..."
-    
-#     # Install go-task using uv (package name is go-task-bin per official docs)
-#     if ! python -c 'import shutil; import sys; sys.exit(0 if shutil.which("task") else 1)' 2>/dev/null; then
-#         log_info "Installing go-task..."
-#         uv pip install go-task-bin
-#     fi
-    
-#     log_success "Development tools installed"
-# }
-
 # Install backend dependencies
 install_backend_dependencies() {
     log_info "Installing backend dependencies..."
@@ -232,85 +219,20 @@ setup_ssh_keys() {
 setup_bash_functions() {
     log_info "Setting up bash functions..."
     
-    # Create functions file
-    cat > "$HOME/.dev_functions" << 'EOF'
-# Development environment functions
-
-# Quick environment activation
-devenv() {
-    local venv_dir="$BUDGEA_VENV_DIR"
-    if [[ -f "$venv_dir/bin/activate" ]]; then
-        source "$venv_dir/bin/activate"
-        echo "✅ Development environment activated"
+    # Source container-bashrc which contains all the development functions
+    if [[ -f "$HOME/dev/container-bashrc" ]]; then
+        # Source it in bashrc if not already there
+        if ! grep -q "container-bashrc" "$HOME/.bashrc"; then
+            echo "source $HOME/dev/container-bashrc" >> "$HOME/.bashrc"
+        fi
+        
+        source "$HOME/dev/container-bashrc"
+        log_success "Bash functions configured from container-bashrc"
     else
-        echo "❌ Virtual environment not found. Run setup-environment.sh"
-        return 1
+        log_error "container-bashrc not found at $HOME/dev/container-bashrc"
+        log_error "Make sure the file is properly mounted in docker-compose.yml"
+        exit 1
     fi
-}
-
-# Aliases
-alias gm="sudo service gearman-job-server start"
-alias ll="ls -la"
-alias la="ls -la"
-
-# Database functions
-setup_local_db() {
-    python3 "$HOME/dev/backend/tools/setup_local_databases.py" -s --no-interactive --force-drop-databases
-    export BUDGEA_TOKEN=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select token from bi_manage_token where scope='admin';")
-}
-
-create_budgea_db_user() {
-    sudo mysql -uroot -p1245487 -hmariadb -e "CREATE USER IF NOT EXISTS 'budgea'@'%' IDENTIFIED BY '123456'; GRANT ALL PRIVILEGES ON *.* TO 'budgea'@'%' WITH GRANT OPTION;"
-}
-
-# Key management
-create_keys() {
-    python3 "$HOME/dev/backend/tools/gen_key.py"
-    sudo mkdir -p /etc/bi
-    sudo mv -f frontend.pkey /etc/bi/frontend.pkey
-    sudo mv -f backend.key /etc/bi/backend.key
-    sudo chmod 600 /etc/bi/frontend.pkey /etc/bi/backend.key
-    sudo gpg --batch --yes --symmetric --cipher-algo AES256 --output /etc/bi/backend.key.gpg /etc/bi/backend.key
-}
-
-# Woob functions
-update_woob() {
-    python "$HOME/dev/woob/woob/woob_metadata/build_modules_metadata.py"
-}
-
-# Client creation
-create_client() {
-    budgea &
-    local budgea_pid=$!
-    budgea.wsgi &
-    local wsgi_pid=$!
-    sleep 10
-    curl http://localhost:3158/clients -H "Authorization: Bearer $BUDGEA_TOKEN" -d ''
-    export BUDGEA_CLIENT=$(sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "select id from bi_client;")
-    sudo mysql -uroot -p1245487 -hmariadb -Dlocalhost_3158 -se "update bi_client set redirect_uris='[\"http://localhost:4200/\", \"https://example.org/user/settings\"]' where id=$BUDGEA_CLIENT;"
-    budgeactl config localhost:3158 root.prefix ''
-    kill $budgea_pid $wsgi_pid 2>/dev/null || true
-}
-
-# Full setup
-full_setup() {
-    cd "$HOME/dev/backend"
-    devenv
-    update_woob
-    create_budgea_db_user
-    [[ ! -f "/etc/bi/frontend.pkey" ]] && create_keys
-    setup_local_db
-    create_client
-}
-EOF
-
-    # Source it in bashrc if not already there
-    if ! grep -q ".dev_functions" "$HOME/.bashrc"; then
-        echo "source $HOME/.dev_functions" >> "$HOME/.bashrc"
-    fi
-    
-    source "$HOME/.dev_functions"
-    log_success "Bash functions configured"
 }
 
 # Auto-activate environment on login

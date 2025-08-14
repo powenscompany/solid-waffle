@@ -1,4 +1,5 @@
 # Exclude host virtual environments from bind mounts
+# ignore venv: avoid conflicts with local ones and only use venv created inside the container
 **/.venv/
 **/__pycache__/
 **/*.pyc
